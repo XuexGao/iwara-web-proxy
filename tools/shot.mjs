@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { firefox } from 'playwright-core';
 
-const EXECUTABLE = '/root/.cache/ms-playwright/firefox-1555/firefox/firefox';
+const EXECUTABLE = process.env.SHOT_FIREFOX || '/root/.cache/ms-playwright/firefox-1555/firefox/firefox';
 const BASE = process.env.SHOT_BASE || 'http://127.0.0.1:8788';
 const OUT_DIR = process.env.SHOT_OUT || '/tmp/shots';
 const WIDTH = Number(process.env.SHOT_W || 1440);

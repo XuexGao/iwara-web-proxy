@@ -161,7 +161,9 @@ test/            后端集成测试（打真实上游）
 
 ```bash
 node dev-server.mjs        # http://127.0.0.1:8788
-node test/backend.test.mjs # 31 项后端集成测试，打真实 Iwara 接口
+npm test                   # 31 项后端集成测试，打真实 Iwara 接口
+npm run test:ui            # 28 项浏览器冒烟测试（需先启动 dev-server）
+npm run check              # 静态检查所有 import 的具名导出是否存在
 ```
 
 `dev-server.mjs` 是一个薄适配层：静态资源从 `public/` 读盘，

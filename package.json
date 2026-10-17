@@ -8,7 +8,10 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "tail": "wrangler tail",
-    "secret": "wrangler secret put SESSION_SECRET"
+    "secret": "wrangler secret put SESSION_SECRET",
+    "test": "node test/backend.test.mjs",
+    "test:ui": "node test/frontend.smoke.mjs",
+    "check": "node tools/check-imports.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.126.0"
