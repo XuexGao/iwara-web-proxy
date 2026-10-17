@@ -5,7 +5,7 @@
 import { fetchVideos, formatCount } from '../api.js';
 import { createFeed, lede } from '../cards.js';
 import { getSetting, ratingParam, setSetting } from '../store.js';
-import { SORT_LABELS, SORT_OPTIONS, icon, on, raw, tpl } from '../ui.js';
+import { SORT_LABELS, SORT_OPTIONS, icon, on, tpl } from '../ui.js';
 
 const INTRO = {
   trending: '过去一周里被反复打开的作品。适合不知道看什么的时候随便翻。',
@@ -84,8 +84,8 @@ export async function renderHome(ctx) {
 
   const footer = tpl`
     <div style="margin-top:34px" class="note">
-      想按题材找？去 ${raw('<a href="#/tags" style="color:var(--celadon)">标签索引</a>')}，
-      或者用顶部的搜索框。搜索需要登录 Iwara 账号。
+      想按题材找？点任意作品下方的标签，就能顺着它找到同类作品。
+      顶部的搜索框也支持关键词，搜索需要登录 Iwara 账号。
     </div>`;
 
   return tpl`<div>${head}${toolbar}${feedHost}${footer}</div>`;

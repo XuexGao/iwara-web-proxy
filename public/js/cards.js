@@ -55,9 +55,10 @@ export function workCard(item, kind = 'video', options = {}) {
   if (kind === 'image') marks.push(raw('<i data-kind="image" title="图库"></i>'));
   if (marks.length) cover.append(tpl`<span class="card__mark">${marks}</span>`);
 
+  // 单张图库标「1 张」是噪音，只在多于一张时标出来。
   const badge =
     kind === 'image'
-      ? item.numImages
+      ? item.numImages > 1
         ? `${item.numImages} 张`
         : ''
       : item.file?.duration

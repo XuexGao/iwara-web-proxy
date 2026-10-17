@@ -7,22 +7,28 @@ import { stopAllPreviews } from './cards-preview.js';
 import { mini, playback } from './player.js';
 import router from './router.js';
 import {
+  bootstrapTheme,
+  getSetting,
   getSession,
+  getTheme,
   loadAuthConfig,
   logout,
   onSessionChange,
+  onSettingChange,
   refreshSession,
+  refreshSession as _refresh,
   setSetting,
-  getSetting
+  setTheme
 } from './store.js';
-import { icon, tpl } from './ui.js';
+import { icon, toast, tpl } from './ui.js';
 
 import { renderHome } from './views/home.js';
 import { renderWatch } from './views/watch.js';
 import { renderSearch } from './views/search.js';
-import { renderTag, renderTags } from './views/tags.js';
+import { renderTag } from './views/tags.js';
 import { renderGallery, renderImages, renderPlaylist, renderPlaylists } from './views/gallery.js';
 import { renderProfile } from './views/profile.js';
+import { renderSubscriptions } from './views/subscriptions.js';
 import { renderForum, renderForumCategory, renderForumThread, renderPosts } from './views/forum.js';
 import { renderAbout, renderLibrary, renderSettings } from './views/library.js';
 import { renderLogin } from './views/login.js';
@@ -34,8 +40,8 @@ import { renderLogin } from './views/login.js';
 router
   .route('/', renderHome)
   .route('/search', renderSearch)
-  .route('/tags', renderTags)
   .route('/tag/:id', renderTag)
+  .route('/subscriptions', renderSubscriptions)
   .route('/images', renderImages)
   .route('/image/:id', renderGallery)
   .route('/playlists', renderPlaylists)
@@ -112,6 +118,37 @@ document.getElementById('logout-button')?.addEventListener('click', async () => 
 });
 
 /* ------------------------------------------------------------------ *
+ * 主题切换
+ * ------------------------------------------------------------------ */
+
+const themeButton = document.getElementById('theme-button');
+
+function paintThemeButton() {
+  if (!themeButton) return;
+  const resolved = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+  // 图标画的是"当前处于哪种配色"（浅色=太阳，深色=月亮），
+  // title 说明点下去会变成什么，两者不混用。
+  themeButton.innerHTML = `<svg class="icon"><use href="#i-${resolved === 'light' ? 'sun' : 'moon'}"/></svg>`;
+  themeButton.title = resolved === 'light' ? '当前浅色，点击切换到深色' : '当前深色，点击切换到浅色';
+  themeButton.setAttribute('aria-label', themeButton.title);
+}
+
+themeButton?.addEventListener('click', () => {
+  const current = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+  setTheme(current === 'light' ? 'dark' : 'light');
+  paintThemeButton();
+  toast(current === 'light' ? '已切换到深色' : '已切换到浅色');
+});
+
+// 设置页改动配色时同步按钮图标，避免两处各写一套 DOM 操作。
+onSettingChange((key) => {
+  if (key === 'theme') paintThemeButton();
+});
+
+// 系统主题变化时（theme=system）同步按钮图标。
+window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', paintThemeButton);
+
+/* ------------------------------------------------------------------ *
  * 会话渲染
  * ------------------------------------------------------------------ */
 
@@ -163,6 +200,8 @@ window.addEventListener('beforeunload', () => {
  * ------------------------------------------------------------------ */
 
 (async function boot() {
+  bootstrapTheme();
+  paintThemeButton();
   renderAccount(getSession());
   // 两个请求并发：登录能力来自 /api/auth/config，会话来自 /api/auth/me。
   await Promise.all([loadAuthConfig(), refreshSession()]);

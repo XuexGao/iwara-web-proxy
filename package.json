@@ -11,6 +11,7 @@
     "secret": "wrangler secret put SESSION_SECRET",
     "test": "node test/backend.test.mjs",
     "test:ui": "node test/frontend.smoke.mjs",
+    "test:routes": "node test/routes.smoke.mjs",
     "check": "node tools/check-imports.mjs"
   },
   "devDependencies": {

@@ -20,7 +20,7 @@ import {
   postComment
 } from '../api.js';
 import { commentNode, createFeed, lede, playlistCard, tagRow, userLink, workCard } from '../cards.js';
-import { getSession, getSetting, ratingParam } from '../store.js';
+import { getSession, getSetting, ratingParam, recordHistory } from '../store.js';
 import { icon, stateBlock, tpl, toast, toastError } from '../ui.js';
 
 /* ------------------------------------------------------------------ *
@@ -82,6 +82,19 @@ export async function renderGallery(ctx, { id }) {
   const files = (Array.isArray(detail.files) ? detail.files : []).filter((file) => file?.id && file?.name);
   const title = detail.title || '无标题图库';
   const authorName = detail.user?.name || detail.user?.username || '匿名';
+
+  // 图库也要进观看历史，和视频共用同一套记录。
+  recordHistory({
+    id,
+    title,
+    kind: 'image',
+    author: authorName,
+    rating: detail.rating,
+    cover: {
+      thumbnail: detail.thumbnail,
+      customThumbnail: detail.customThumbnail
+    }
+  });
 
   /* ---------------- 大图浏览 ---------------- */
 

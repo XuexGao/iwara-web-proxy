@@ -26,7 +26,9 @@ const DEFAULT_SETTINGS = {
   /** 高级：自带 Token，直接透传给上游。 */
   token: '',
   /** 列表每页数量。 */
-  limit: 32
+  limit: 32,
+  /** 配色：system 跟随系统，dark 深色，light 浅色。 */
+  theme: 'system'
 };
 
 function readJson(key, fallback) {
@@ -40,11 +42,45 @@ function readJson(key, fallback) {
   }
 }
 
+/**
+ * 存储是否可用。隐私模式、被禁用的站点数据、配额用尽都会让它变成 false。
+ * 历史"存不下来"最常见的原因就在这里，所以要把状态暴露出去，
+ * 而不是静默吞掉。
+ */
+let storageState = { ok: true, reason: '' };
+
 function writeJson(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    /* 隐私模式下写不进去，忽略 */
+    storageState = { ok: true, reason: '' };
+  } catch (error) {
+    storageState = {
+      ok: false,
+      reason:
+        error?.name === 'QuotaExceededError'
+          ? '浏览器存储空间已满'
+          : '浏览器不允许本站写入本地存储（可能处于无痕模式）'
+    };
+  }
+}
+
+/** 探测一次存储可用性。 */
+export function getStorageState() {
+  if (!storageState.ok) return storageState;
+  try {
+    const probe = '__iwara_probe__';
+    localStorage.setItem(probe, '1');
+    localStorage.removeItem(probe);
+    return { ok: true, reason: '' };
+  } catch (error) {
+    storageState = {
+      ok: false,
+      reason:
+        error?.name === 'QuotaExceededError'
+          ? '浏览器存储空间已满'
+          : '浏览器不允许本站写入本地存储（可能处于无痕模式）'
+    };
+    return storageState;
   }
 }
 
@@ -82,6 +118,56 @@ export function ratingParam() {
 /** 高级用法：请求方自带 Token。 */
 export function customToken() {
   return String(settings.token || '').trim();
+}
+
+/* ------------------------------------------------------------------ *
+ * 主题
+ * ------------------------------------------------------------------ */
+
+const THEME_KEY = 'iwara.theme.v1';
+const media = window.matchMedia('(prefers-color-scheme: light)');
+
+/** 解析某条设置实际该用的配色（system 交给系统判断）。 */
+function resolvedTheme(value) {
+  if (value === 'light') return 'light';
+  if (value === 'dark') return 'dark';
+  return media.matches ? 'light' : 'dark';
+}
+
+export function applyTheme() {
+  const value = settings.theme || 'system';
+  const resolved = resolvedTheme(value);
+  document.documentElement.dataset.theme = resolved;
+  // 让地址栏/状态栏跟着变，移动端观感差别很大。
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', resolved === 'light' ? '#f6f2ec' : '#100d16');
+  return resolved;
+}
+
+export function setTheme(value) {
+  const next = ['system', 'dark', 'light'].includes(value) ? value : 'system';
+  setSetting('theme', next);
+  writeJson(THEME_KEY, next);
+  applyTheme();
+  return next;
+}
+
+export function getTheme() {
+  return settings.theme || 'system';
+}
+
+// 跟随系统时，用户切了系统主题要立刻响应。
+media.addEventListener('change', () => {
+  if ((settings.theme || 'system') === 'system') applyTheme();
+});
+
+/** 在首帧之前就跑一次，避免浅色主题下闪一下深色。 */
+export function bootstrapTheme() {
+  const saved = readJson(THEME_KEY, null);
+  if (saved === 'light' || saved === 'dark' || saved === 'system') {
+    settings = { ...settings, theme: saved };
+  }
+  applyTheme();
 }
 
 /* ------------------------------------------------------------------ *
@@ -176,19 +262,128 @@ export async function logout() {
  * 观看历史与续播
  * ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ *
+ * 观看历史
+ *
+ * 写两份：localStorage（同步、读取快）和 IndexedDB（容量大、
+ * 不容易被浏览器的存储清理策略连坐清掉）。读取时以 localStorage 为准，
+ * 缺失则回落到 IndexedDB——隐私模式下 localStorage 可能直接抛异常，
+ * 那时 IndexedDB 往往还能写。
+ * ------------------------------------------------------------------ */
+
+const IDB_NAME = 'iwara-web';
+const IDB_STORE = 'history';
+let idbPromise = null;
+
+function openIdb() {
+  if (idbPromise) return idbPromise;
+  idbPromise = new Promise((resolve) => {
+    try {
+      if (!('indexedDB' in window)) return resolve(null);
+      const request = indexedDB.open(IDB_NAME, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) {
+          db.createObjectStore(IDB_STORE, { keyPath: 'id' });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+  return idbPromise;
+}
+
+async function idbWrite(entry) {
+  const db = await openIdb();
+  if (!db) return;
+  try {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(entry);
+  } catch {
+    /* 写不进去也不影响 localStorage 那份 */
+  }
+}
+
+async function idbReadAll() {
+  const db = await openIdb();
+  if (!db) return [];
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const request = tx.objectStore(IDB_STORE).getAll();
+      request.onsuccess = () => resolve(Array.isArray(request.result) ? request.result : []);
+      request.onerror = () => resolve([]);
+    } catch {
+      resolve([]);
+    }
+  });
+}
+
+async function idbClear() {
+  const db = await openIdb();
+  if (!db) return;
+  try {
+    db.transaction(IDB_STORE, 'readwrite').objectStore(IDB_STORE).clear();
+  } catch {
+    /* 忽略 */
+  }
+}
+
 export function getHistory() {
   const list = readJson(KEY_HISTORY, []);
   return Array.isArray(list) ? list : [];
 }
 
+/**
+ * 读历史。localStorage 为空时尝试从 IndexedDB 恢复——
+ * 浏览器清理了 localStorage 也能把记录捞回来。
+ */
+export async function loadHistory() {
+  const local = getHistory();
+  if (local.length) return local;
+  const restored = await idbReadAll();
+  if (!restored.length) return [];
+  const sorted = restored
+    .filter((item) => item && item.id)
+    .sort((a, b) => (b.watchedAt || 0) - (a.watchedAt || 0))
+    .slice(0, 240);
+  writeJson(KEY_HISTORY, sorted);
+  return sorted;
+}
+
 export function recordHistory(entry) {
+  const record = { ...entry, watchedAt: Date.now() };
   const list = getHistory().filter((item) => item.id !== entry.id);
-  list.unshift({ ...entry, watchedAt: Date.now() });
+  list.unshift(record);
   writeJson(KEY_HISTORY, list.slice(0, 240));
+  idbWrite(record);
 }
 
 export function clearHistory() {
   writeJson(KEY_HISTORY, []);
+  idbClear();
+}
+
+async function idbDelete(id) {
+  const db = await openIdb();
+  if (!db) return;
+  try {
+    db.transaction(IDB_STORE, 'readwrite').objectStore(IDB_STORE).delete(id);
+  } catch {
+    /* 忽略 */
+  }
+}
+
+/** 删除单条历史。 */
+export function removeHistory(id) {
+  writeJson(
+    KEY_HISTORY,
+    getHistory().filter((item) => item.id !== id)
+  );
+  idbDelete(id);
 }
 
 function readResume() {

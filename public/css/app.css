@@ -32,6 +32,8 @@
 }
 
 :root {
+  color-scheme: dark;
+
   --ink: #100d16;
   --ink-1: #171326;
   --ink-2: #1e1930;
@@ -48,6 +50,20 @@
   --celadon: #74d8c2;
   --amber: #f2b45c;
 
+  /* 组件级变量：浅色主题靠覆盖这几个就能整套换掉，
+     不必给每个选择器写两遍。 */
+  --surface-sunken: rgba(16, 13, 22, 0.82);
+  --surface-raised: rgba(30, 25, 48, 0.9);
+  --ring: rgba(255, 78, 124, 0.55);
+  --scrim: rgba(8, 6, 12, 0.74);
+  --card-hover: #ffffff;
+  --shadow: 0 18px 48px -22px rgba(0, 0, 0, 0.9);
+  --glow-a: rgba(255, 78, 124, 0.11);
+  --glow-b: rgba(116, 216, 194, 0.08);
+  --tint-rose: rgba(255, 78, 124, 0.18);
+  --tint-amber: rgba(242, 180, 92, 0.16);
+  --tint-celadon: rgba(116, 216, 194, 0.14);
+
   --font-display: 'Fraunces', 'Songti SC', 'Noto Serif CJK SC', serif;
   --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
@@ -61,8 +77,43 @@
   --pad: clamp(14px, 2.4vw, 28px);
   --maxw: 1560px;
 
-  --shadow: 0 18px 48px -22px rgba(0, 0, 0, 0.9);
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* ---------------------------------------------------------------- 浅色主题
+   不是把深色反相，而是换成一套「纸与朱砂」的配色：
+   暖白纸底 + 深墨字 + 略深的玫瑰红保证对比度。 */
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --ink: #f6f2ec;          /* 页面底色：暖白纸 */
+  --ink-1: #fffdfa;        /* 卡片面 */
+  --ink-2: #f0eae1;        /* 次级面 */
+  --ink-3: #e4dcd0;        /* 分隔 / 轨道 */
+  --line: #d8cec0;
+  --line-soft: #e6ded2;
+
+  --paper: #1f1a15;        /* 主文字：墨 */
+  --paper-2: #4c433a;      /* 次级文字 */
+  --paper-3: #857a6c;      /* 弱化文字 */
+
+  --rose: #c92a52;         /* 加深，保证在白底上够对比 */
+  --rose-deep: #a3153c;
+  --celadon: #1c7f6d;
+  --amber: #9a5f10;
+
+  --surface-sunken: rgba(255, 253, 250, 0.9);
+  --surface-raised: rgba(255, 253, 250, 0.97);
+  --ring: rgba(201, 42, 82, 0.45);
+  --scrim: rgba(40, 32, 24, 0.42);
+  --card-hover: #000000;
+  --shadow: 0 16px 40px -24px rgba(60, 45, 30, 0.45);
+  --glow-a: rgba(201, 42, 82, 0.06);
+  --glow-b: rgba(28, 127, 109, 0.05);
+  --tint-rose: rgba(201, 42, 82, 0.12);
+  --tint-amber: rgba(154, 95, 16, 0.13);
+  --tint-celadon: rgba(28, 127, 109, 0.12);
 }
 
 /* ---------------------------------------------------------------- 基础 */
@@ -82,8 +133,8 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(1100px 620px at 82% -12%, rgba(255, 78, 124, 0.11), transparent 62%),
-    radial-gradient(880px 520px at 6% 4%, rgba(116, 216, 194, 0.08), transparent 58%),
+    radial-gradient(1100px 620px at 82% -12%, var(--glow-a), transparent 62%),
+    radial-gradient(880px 520px at 6% 4%, var(--glow-b), transparent 58%),
     var(--ink);
   color: var(--paper);
   font-family: var(--font-sans);
@@ -176,7 +227,7 @@ p {
   gap: 14px;
   height: var(--topbar-h);
   padding: 0 var(--pad);
-  background: rgba(16, 13, 22, 0.82);
+  background: var(--surface-sunken);
   backdrop-filter: blur(18px) saturate(1.4);
   border-bottom: 1px solid var(--line-soft);
 }
@@ -231,7 +282,7 @@ p {
 }
 
 .searchbar:focus-within {
-  border-color: rgba(255, 78, 124, 0.55);
+  border-color: var(--ring);
   background: var(--ink-2);
 }
 
@@ -481,6 +532,38 @@ main {
 
 /* ---------------------------------------------------------------- 控件 */
 
+/* ---------------------------------------------------------------- 主题切换 */
+
+.themebtn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-right: 8px;
+  padding: 0;
+  background: var(--ink-1);
+  border: 1px solid var(--line-soft);
+  border-radius: 50%;
+  color: var(--paper-2);
+  cursor: pointer;
+  transition: color 0.15s var(--ease), border-color 0.15s var(--ease),
+    transform 0.2s var(--ease);
+}
+
+.themebtn:hover {
+  color: var(--paper);
+  border-color: var(--line);
+}
+
+.themebtn:active {
+  transform: rotate(-18deg) scale(0.94);
+}
+
+.topbar__end {
+  display: flex;
+  align-items: center;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -650,12 +733,12 @@ main {
 }
 
 .badge--ecchi {
-  background: rgba(242, 180, 92, 0.16);
+  background: var(--tint-amber);
   color: var(--amber);
 }
 
 .badge--live {
-  background: rgba(255, 78, 124, 0.18);
+  background: var(--tint-rose);
   color: var(--rose);
 }
 
@@ -688,6 +771,15 @@ main {
 
 select.input {
   cursor: pointer;
+  /* 去掉浏览器原生箭头，换成与主题一致的自绘箭头，
+     否则深色主题下会出现一条系统白边。 */
+  appearance: none;
+  padding-right: 38px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 19px) calc(50% + 1px), calc(100% - 14px) calc(50% + 1px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
 }
 
 .switch {
@@ -858,7 +950,7 @@ select.input {
 }
 
 .card:hover .card__title {
-  color: #fff;
+  color: var(--card-hover);
 }
 
 .card__meta {
@@ -953,7 +1045,11 @@ select.input {
   color: var(--paper-3);
 }
 
-/* ---------------------------------------------------------------- 播放器 */
+/* ---------------------------------------------------------------- 播放器
+   播放器与迷你播放器内部一律保持深色：它们盖在视频画面上，
+   深色底才不干扰画面，浅色主题下也不应该变成白底。 */
+
+
 
 .watch {
   display: grid;
@@ -1102,6 +1198,7 @@ select.input {
   font-size: 12px;
   color: #e9e4f0;
   white-space: nowrap;
+  flex: none;
 }
 
 .player__scrub {
@@ -1250,6 +1347,15 @@ select.input {
 }
 
 /* ---------------------------------------------------------------- 迷你播放器 */
+
+/* 播放器与迷你播放器内部强制深色，与主题解耦。 */
+.player,
+.mini {
+  /* 强制深色上下文：里面的文字/图标一律用浅色，
+     否则浅色主题下会把 --paper 变成近黑，压在视频画面上直接看不见。 */
+  color: #f4f0f8;
+  color-scheme: dark;
+}
 
 .mini {
   position: fixed;
@@ -1684,6 +1790,7 @@ select.input {
   display: flex;
   gap: 14px;
   align-items: center;
+  min-width: 0;
   padding: 15px 4px;
   border-bottom: 1px solid var(--line-soft);
   transition: background 0.14s var(--ease);
@@ -1726,6 +1833,61 @@ select.input {
   color: var(--celadon);
 }
 
+/* ---------------------------------------------------------------- 历史条目 */
+
+/* 历史条目比普通行多一个删除按钮和进度条，缩略图也略大一点。 */
+.rowlist .rowitem .rail__thumb {
+  width: 176px;
+  flex: none;
+}
+
+.rowitem .iconbtn {
+  margin-left: auto;
+}
+
+
+.historybar {
+  position: relative;
+  height: 3px;
+  margin-top: 7px;
+  background: var(--ink-3);
+  border-radius: 2px;
+  overflow: hidden;
+  max-width: 220px;
+}
+
+.historybar i {
+  display: block;
+  height: 100%;
+  background: var(--rose);
+  border-radius: inherit;
+}
+
+.iconbtn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 50%;
+  color: var(--paper-3);
+  cursor: pointer;
+  transition: background 0.14s var(--ease), color 0.14s var(--ease);
+}
+
+.iconbtn:hover {
+  background: var(--ink-2);
+  color: var(--rose);
+}
+
+.iconbtn .icon {
+  width: 15px;
+  height: 15px;
+}
+
 /* ---------------------------------------------------------------- 状态 */
 
 .skeleton {
@@ -1758,9 +1920,10 @@ select.input {
 }
 
 .state p {
-  max-width: 46ch;
+  max-width: 52ch;
   color: var(--paper-3);
   font-size: 13.5px;
+  line-height: 1.7;
 }
 
 .loadmore {
@@ -1795,8 +1958,9 @@ select.input {
 }
 
 .toast--err {
-  border-color: rgba(255, 78, 124, 0.5);
-  color: #ffd9e2;
+  border-color: var(--rose);
+  color: var(--rose);
+  background: var(--ink-1);
 }
 
 .modal {
@@ -1806,7 +1970,7 @@ select.input {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgba(8, 6, 12, 0.74);
+  background: var(--scrim);
   backdrop-filter: blur(5px);
 }
 
@@ -1852,20 +2016,23 @@ select.input {
 .formerror {
   padding: 10px 13px;
   margin-bottom: 14px;
-  background: rgba(255, 78, 124, 0.12);
-  border: 1px solid rgba(255, 78, 124, 0.35);
+  background: var(--tint-rose);
+  border: 1px solid var(--rose);
   border-radius: var(--r-sm);
   font-size: 13px;
-  color: #ffd0da;
+  color: var(--rose);
 }
 
 .note {
   padding: 12px 14px;
   background: var(--ink-1);
-  border-left: 2px solid var(--celadon);
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--celadon);
   border-radius: 0 var(--r-sm) var(--r-sm) 0;
   font-size: 13px;
+  line-height: 1.6;
   color: var(--paper-2);
+  text-align: left;
 }
 
 .prose {

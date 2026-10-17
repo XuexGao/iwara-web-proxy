@@ -11,11 +11,16 @@ import router from '../router.js';
 import {
   clearHistory,
   getHistory,
+  getResume,
+  getStorageState,
   getSession,
   getSetting,
+  loadHistory,
   logout,
   onSessionChange,
-  setSetting
+  removeHistory,
+  setSetting,
+  setTheme
 } from '../store.js';
 import {
   SORT_LABELS,
@@ -67,7 +72,7 @@ function countLabel(node, count, unit) {
  * ------------------------------------------------------------------ */
 
 export async function renderLibrary(ctx, params = {}) {
-  return params.kind === 'history' ? historyView(ctx) : favoritesView(ctx);
+  return params.kind === 'history' ? await historyView(ctx) : favoritesView(ctx);
 }
 
 /* ------------------------------------------------------------------ *
@@ -204,50 +209,108 @@ function historyCover(entry) {
   return coverUrl(entry?.cover || entry, entry?.kind === 'image' ? 'image' : 'video');
 }
 
-function historyRow(entry) {
+function historyRow(entry, { onRemove } = {}) {
   const isImage = entry.kind === 'image';
   const href = entry.id ? `#/${isImage ? 'image' : 'video'}/${encodeURIComponent(entry.id)}` : '#/';
-  return tpl`
+
+  // 续播进度：有记录就把看到哪儿显示出来，比只写"看过"有用得多。
+  const resume = !isImage && entry.id ? getResume(entry.id) : 0;
+  const duration = Number(entry.duration) || 0;
+  const percent = resume && duration ? Math.min(100, Math.round((resume / duration) * 100)) : 0;
+  const resumeText = resume
+    ? percent >= 96
+      ? '已看完'
+      : `看到 ${Math.floor(resume / 60)}:${String(Math.floor(resume % 60)).padStart(2, '0')}${percent ? ` · ${percent}%` : ''}`
+    : '';
+
+  const row = tpl`
     <article class="rowitem">
       <a class="rail__thumb" href="${href}">
         <img src="${historyCover(entry)}" alt="" loading="lazy" decoding="async" />
+        ${resumeText ? tpl`<span class="card__dur">${resumeText}</span>` : null}
       </a>
       <div class="rowitem__main">
         <a class="rowitem__title" href="${href}">${entry.title || '未记录标题'}</a>
         <div class="rowitem__meta">
           <span>${entry.watchedAt ? formatDate(entry.watchedAt) : ''}</span>
           ${entry.author ? tpl`<span>${entry.author}</span>` : null}
+          ${entry.rating === 'ecchi' ? tpl`<span class="badge badge--ecchi">R18</span>` : null}
         </div>
+        ${percent ? tpl`<div class="historybar"><i style="width:${percent}%"></i></div>` : null}
       </div>
       <span class="rowitem__tag">${isImage ? '图库' : '视频'}</span>
+      <button class="iconbtn" type="button" title="从历史中删除" aria-label="从历史中删除">
+        ${icon('close')}
+      </button>
     </article>`;
+
+  row.querySelector('.iconbtn')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    removeHistory(entry.id);
+    if (onRemove) onRemove(row);
+  });
+
+  return row;
 }
 
-function historyView(ctx) {
-  const entries = getHistory();
+async function historyView(ctx) {
+  const entries = await loadHistory();
 
   const countNode = tpl`<span class="lede__count"></span>`;
   countLabel(countNode, entries.length, '条记录');
   const head = lede({
     eyebrow: 'LIBRARY · 观看历史',
     title: '观看历史',
-    desc: '只记录在这台设备上打开过的作品，存在浏览器 localStorage 里，不上传。'
+    desc: '只记录在这台设备上打开过的作品，不上传。数据存在浏览器本地，换设备或清理浏览器数据后不会再出现。'
   });
   head.append(countNode);
 
   const list = tpl`<div class="rowlist"></div>`;
 
+  // 存储被禁时，历史必然一直是空的——直接说明原因，别让人反复刷新。
+  const storage = getStorageState();
+  if (!storage.ok) {
+    const warn = tpl`
+      <div class="note" style="border-left-color:var(--rose);margin-bottom:18px">
+        <strong>这台浏览器不允许本站保存数据</strong><br />
+        ${storage.reason}。所以观看历史会一直是空的，收藏以外的本机数据（续播位置、设置）也不会保留。
+        退出无痕模式，或在浏览器设置里允许本站使用站点数据后再试。
+      </div>`;
+    head.after(warn);
+  }
+
   if (!entries.length) {
-    list.replaceChildren(
-      stateBlock({
-        title: '还没有观看记录',
-        message: '打开任意一个视频或图库后，这里会记下看过的作品和大概时间，方便回头再找。'
-      })
-    );
+    const empty = stateBlock({
+      title: '还没有观看记录',
+      message:
+        '打开任意一个视频或图库，这里就会记下来，并保留你看到哪儿。记录只存在这台设备上，换设备或清理浏览器数据后不会再出现。'
+    });
+    const actions = tpl`
+      <div style="display:flex;gap:9px;flex-wrap:wrap;justify-content:center;margin-top:4px">
+        <a class="btn btn--primary btn--sm" href="#/">去首页挑一个</a>
+        <a class="btn btn--sm" href="#/library/favorites">看我的收藏</a>
+      </div>`;
+    empty.append(actions);
+    list.replaceChildren(empty);
     return tpl`<div>${head}${list}</div>`;
   }
 
-  for (const entry of entries) list.append(historyRow(entry));
+  let visible = entries.length;
+  const updateCount = () => {
+    countLabel(countNode, visible, '条记录');
+  };
+  for (const entry of entries) {
+    list.append(
+      historyRow(entry, {
+        onRemove: (row) => {
+          row.remove();
+          visible -= 1;
+          updateCount();
+          if (!visible) router.reload();
+        }
+      })
+    );
+  }
 
   const clearButton = tpl`<button class="btn btn--sm" type="button">${icon('close')}<span>清空历史</span></button>`;
   clearButton.addEventListener('click', async () => {
@@ -354,6 +417,33 @@ export async function renderSettings(ctx) {
 
   /* 默认值 */
   const defaultsPanel = settingsPanel('默认值');
+  const themeValue = ['system', 'dark', 'light'].includes(getSetting('theme'))
+    ? getSetting('theme')
+    : 'system';
+  defaultsPanel.append(
+    selectRow({
+      label: '配色',
+      hint: '选「跟随系统」时，系统切到浅色或深色会自动跟着变。顶部工具栏的按钮显示当前配色，点一下就切到另一种。',
+      value: themeValue,
+      options: [
+        { value: 'system', label: '跟随系统' },
+        { value: 'dark', label: '深色' },
+        { value: 'light', label: '浅色' }
+      ],
+      onChange: (value) => {
+        setTheme(value);
+        // 顶部按钮的图标由 app.js 监听设置变更后刷新，这里不直接碰 DOM。
+        const resolved = document.documentElement.dataset.theme;
+        toast(
+          value === 'system'
+            ? `已改为跟随系统（当前${resolved === 'light' ? '浅色' : '深色'}）`
+            : value === 'light'
+              ? '已切换到浅色'
+              : '已切换到深色'
+        );
+      }
+    })
+  );
   const sortValue = SORT_LABELS[getSetting('sort')] ? getSetting('sort') : SORT_OPTIONS[0].id;
   defaultsPanel.append(
     selectRow({

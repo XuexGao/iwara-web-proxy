@@ -93,6 +93,22 @@ async function load(ctx, id, root, holder) {
   holder.meta.title = title;
   holder.meta.author = authorName;
 
+  // 打开就算看过：放到这里而不是播放器创建之后，
+  // 这样即使取流失败、用户马上离开，历史里也会留下这条。
+  recordHistory({
+    id,
+    title,
+    kind: 'video',
+    author: authorName,
+    rating: detail.rating,
+    duration: Number(detail.file?.duration) || 0,
+    cover: {
+      file: detail.file,
+      thumbnail: detail.thumbnail,
+      customThumbnail: detail.customThumbnail
+    }
+  });
+
   /* ---------------- 播放器 ---------------- */
 
   const resume = getResume(id);
@@ -180,18 +196,6 @@ async function load(ctx, id, root, holder) {
     holder.player = player;
     playback.videoId = id;
     playback.video = player.video;
-
-    recordHistory({
-      id,
-      title,
-      kind: 'video',
-      author: authorName,
-      cover: {
-        file: detail.file,
-        thumbnail: detail.thumbnail,
-        customThumbnail: detail.customThumbnail
-      }
-    });
 
     return player.element;
   }

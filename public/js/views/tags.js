@@ -2,145 +2,16 @@
  * 标签：总览与单个标签下的作品。
  */
 
-import { fetchTag, fetchTags, fetchVideos, formatCount, tagLabel } from '../api.js';
+import { fetchTag, fetchVideos, formatCount, tagLabel } from '../api.js';
 import { createFeed, lede } from '../cards.js';
 import { getSetting, ratingParam, setSetting } from '../store.js';
-import { SORT_LABELS, SORT_OPTIONS, icon, observeBottom, stateBlock, tpl } from '../ui.js';
+import { SORT_LABELS, SORT_OPTIONS, icon, stateBlock, tpl } from '../ui.js';
 
 const TYPE_LABELS = {
   general: '通用',
   category: '分类',
   source: '来源'
 };
-
-const TYPE_HINTS = {
-  general: '内容特征，比如分辨率、时长、画风',
-  category: '作品所属的大类，比如原作、创作工具',
-  source: '原始出处与素材来源'
-};
-
-/* ------------------------------------------------------------------ *
- * 标签总览
- * ------------------------------------------------------------------ */
-
-export async function renderTags(ctx) {
-  const sort = ctx.query.get('sort') === 'date' ? 'date' : 'popularity';
-  const filter = ['all', 'general', 'category', 'source'].includes(ctx.query.get('type'))
-    ? ctx.query.get('type')
-    : 'all';
-
-  const head = lede({
-    eyebrow: 'TAG INDEX',
-    title: '标签索引',
-    desc: 'Iwara 的每个作品都挂在若干标签下。挑一个标签，就能顺着它找到同一题材的所有作品。'
-  });
-
-  const countNode = tpl`<span class="lede__count"></span>`;
-  head.append(countNode);
-
-  const sortChips = tpl`<div class="chips chips--scroll"></div>`;
-  for (const option of [
-    { id: 'popularity', label: '最常用' },
-    { id: 'date', label: '最新出现' }
-  ]) {
-    const params = new URLSearchParams();
-    params.set('sort', option.id);
-    if (filter !== 'all') params.set('type', filter);
-    sortChips.append(
-      tpl`<a class="chip ${option.id === sort ? 'is-on' : ''}" href="#/tags?${params.toString()}">${option.label}</a>`
-    );
-  }
-
-  const typeChips = tpl`<div class="chips chips--scroll"></div>`;
-  for (const option of [
-    { id: 'all', label: '全部' },
-    { id: 'general', label: TYPE_LABELS.general },
-    { id: 'category', label: TYPE_LABELS.category },
-    { id: 'source', label: TYPE_LABELS.source }
-  ]) {
-    const params = new URLSearchParams();
-    params.set('sort', sort);
-    if (option.id !== 'all') params.set('type', option.id);
-    typeChips.append(
-      tpl`<a class="chip ${option.id === filter ? 'is-on' : ''}" href="#/tags?${params.toString()}">${option.label}</a>`
-    );
-  }
-
-  if (filter !== 'all') {
-    typeChips.append(tpl`<span class="badge">${TYPE_HINTS[filter]}</span>`);
-  }
-
-  const wall = tpl`<div class="tagrow" style="gap:8px"></div>`;
-  const footer = tpl`<div class="loadmore"></div>`;
-
-  // 上游 limit 封顶 50，多要也是 50。
-  const PAGE_SIZE = 50;
-  let page = 0;
-  let loading = false;
-  let done = false;
-
-  async function loadMore() {
-    if (loading || done) return;
-    loading = true;
-    footer.replaceChildren(tpl`<div class="skeleton" style="aspect-ratio:auto;height:40px"></div>`);
-    try {
-      const data = await fetchTags({ page, limit: PAGE_SIZE, sort });
-      if (ctx.signal.aborted) return;
-      const results = Array.isArray(data?.results) ? data.results : [];
-      const filtered = filter === 'all' ? results : results.filter((tag) => tag.type === filter);
-      footer.replaceChildren();
-
-      if (page === 0) {
-        countNode.replaceChildren(tpl`<b>${formatCount(data?.count)}</b><br />个标签`);
-      }
-
-      for (const tag of filtered) {
-        wall.append(
-          tpl`<a class="tagchip" data-type="${tag.type || 'general'}" href="#/tag/${encodeURIComponent(tag.id)}" title="${tag.id}">${tagLabel(tag.id)}</a>`
-        );
-      }
-
-      page += 1;
-      if (results.length < PAGE_SIZE) {
-        done = true;
-        if (!wall.childElementCount) {
-          footer.replaceChildren(
-            stateBlock({
-              title: '这一类暂时没有标签',
-              message: '切回「全部」看看，或者直接搜索关键词。'
-            })
-          );
-        }
-        return;
-      }
-      const more = tpl`<button class="btn btn--sm" type="button">加载更多标签</button>`;
-      more.addEventListener('click', loadMore);
-      footer.append(more);
-    } catch (error) {
-      if (ctx.signal.aborted) return;
-      footer.replaceChildren(
-        stateBlock({
-          title: '标签没取到',
-          message: error?.message || '稍后再试。',
-          error: true,
-          action: { label: '重试', onClick: loadMore }
-        })
-      );
-    } finally {
-      loading = false;
-    }
-  }
-
-  loadMore();
-
-  // 滚到底自动续上，省得一直点。
-  const sentinel = tpl`<div style="height:1px"></div>`;
-  footer.after(sentinel);
-  const stop = observeBottom(sentinel, loadMore);
-  ctx.onCleanup(stop);
-
-  return tpl`<div>${head}${sortChips}${typeChips}${wall}${footer}</div>`;
-}
 
 /* ------------------------------------------------------------------ *
  * 单个标签
