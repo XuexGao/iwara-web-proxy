@@ -11,6 +11,7 @@ import {
   getSetting,
   getSession,
   getTheme,
+  gateLogout,
   loadAuthConfig,
   logout,
   onSessionChange,
@@ -20,7 +21,7 @@ import {
   setSetting,
   setTheme
 } from './store.js';
-import { icon, toast, tpl } from './ui.js';
+import { icon, iconNode, toast, tpl } from './ui.js';
 
 import { renderHome } from './views/home.js';
 import { renderWatch } from './views/watch.js';
@@ -171,7 +172,7 @@ function renderAccount(session) {
     loginLink.hidden = true;
   } else {
     nameNode.textContent = '未登录';
-    avatarNode.replaceChildren(icon('user'));
+    avatarNode.replaceChildren(iconNode('user'));
     head.replaceChildren(
       session.loginEnabled
         ? tpl`<strong>未登录</strong><span>登录后可搜索、收藏与评论</span>`
@@ -179,6 +180,18 @@ function renderAccount(session) {
     );
     logoutButton.hidden = true;
     loginLink.hidden = !session.loginEnabled;
+  }
+
+  // 站点密码开启时，菜单里给一个明确的「退出站点」入口。
+  let gateButton = document.getElementById('gate-logout-button');
+  if (!gateButton && session.gateRequired) {
+    gateButton = tpl`<button role="menuitem" id="gate-logout-button" type="button">
+      ${icon('logout')}退出站点（需重新输密码）
+    </button>`;
+    gateButton.addEventListener('click', () => gateLogout());
+    document.getElementById('account-panel')?.append(gateButton);
+  } else if (gateButton) {
+    gateButton.hidden = !session.gateRequired;
   }
 }
 

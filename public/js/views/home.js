@@ -5,7 +5,7 @@
 import { fetchVideos, formatCount } from '../api.js';
 import { createFeed, lede } from '../cards.js';
 import { getSetting, ratingParam, setSetting } from '../store.js';
-import { SORT_LABELS, SORT_OPTIONS, icon, on, tpl } from '../ui.js';
+import { SORT_LABELS, SORT_OPTIONS, tpl } from '../ui.js';
 
 const INTRO = {
   trending: '过去一周里被反复打开的作品。适合不知道看什么的时候随便翻。',
@@ -20,32 +20,19 @@ export async function renderHome(ctx) {
   if (!SORT_LABELS[sort]) sort = 'trending';
   setSetting('sort', sort);
 
-  const countNode = tpl`<span class="lede__count"></span>`;
-  let feed;
-
   const sortChips = tpl`<div class="chips chips--scroll"></div>`;
   for (const option of SORT_OPTIONS) {
     const chip = tpl`<a class="chip ${option.id === sort ? 'is-on' : ''}" href="#/?sort=${option.id}">${option.label}</a>`;
     sortChips.append(chip);
   }
 
-  const ratingChip = tpl`
-    <button class="chip" type="button" aria-pressed="${getSetting('r18')}">
-      ${icon('shield')}<span>显示 R18 内容</span>
-    </button>`;
-
   const head = lede({
     eyebrow: 'INDEX · 作品索引',
     title: SORT_LABELS[sort],
     desc: INTRO[sort] || ''
   });
-  head.append(countNode);
 
-  const toolbar = tpl`
-    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between">
-      ${sortChips}
-      ${ratingChip}
-    </div>`;
+  const toolbar = sortChips;
 
   const feedHost = tpl`<div></div>`;
 
@@ -54,14 +41,9 @@ export async function renderHome(ctx) {
       kind: 'video',
       limit: 32,
       emptyTitle: '这一栏目前是空的',
-      emptyMessage: '换一个排序看看，或者去标签索引里挑一个题材。',
+      emptyMessage: '换一个排序看看，或者点开任意作品、顺着它下方的标签找同类。',
       fetchPage: async (page, limit) => {
         const data = await fetchVideos({ page, limit, sort, rating: ratingParam() });
-        if (page === 0) {
-          countNode.replaceChildren(
-            tpl`<b>${formatCount(data?.count)}</b><br />件作品`
-          );
-        }
         return data;
       }
     });
@@ -69,18 +51,8 @@ export async function renderHome(ctx) {
     return next;
   }
 
-  feed = buildFeed();
+  const feed = buildFeed();
   ctx.onCleanup(() => feed.stop());
-
-  on(toolbar, 'click', 'button.chip', () => {
-    const enabled = !getSetting('r18');
-    setSetting('r18', enabled);
-    ratingChip.setAttribute('aria-pressed', String(enabled));
-    ratingChip.classList.toggle('is-on', enabled);
-    feed.stop();
-    feed = buildFeed();
-  });
-  ratingChip.classList.toggle('is-on', getSetting('r18'));
 
   const footer = tpl`
     <div style="margin-top:34px" class="note">

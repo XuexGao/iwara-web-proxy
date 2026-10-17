@@ -10,7 +10,11 @@
     "directory": "./public",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/media/*"]
+    // 站点访问密码要求**任何**请求都先经过 Worker：
+    // 否则 Assets 的 SPA 回退会把 index.html 直接吐给未知路径的访客
+    // （例如 /video/xxx），密码就只挡得住数据、挡不住页面外壳。
+    // 代价是静态资源也各消耗一次 Worker 请求，换来的是密码真正有效。
+    "run_worker_first": true
   },
 
   "observability": {
@@ -26,6 +30,8 @@
     "SITE_NAME": "Iwara 映像",
     // 默认内容来源站点：main = www.iwara.tv，ai = www.iwara.ai
     "DEFAULT_SITE": "main",
+    // 站点访问密码请用 secret 配置（不能和 vars 同名，否则会冲突）：
+    //   wrangler secret put SITE_PASSWORD
     // 全站 Basic Auth 保护，设置后整个站点（含接口与媒体）都需要登录才能访问。
     // 公开部署强烈建议开启，避免额度被陌生人消耗。用 wrangler secret put 配置更安全。
     "BASIC_AUTH_USER": "",

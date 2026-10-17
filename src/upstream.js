@@ -7,6 +7,8 @@
  * 3. `x-site` 决定拿主站还是 AI 站的内容。
  */
 
+import { constantTimeEqual } from './util.js';
+
 /* ------------------------------------------------------------------ *
  * 站点
  * ------------------------------------------------------------------ */
@@ -103,15 +105,6 @@ export async function upstreamFetch(url, init = {}) {
 /* ------------------------------------------------------------------ *
  * 站点级 Basic Auth（可选）
  * ------------------------------------------------------------------ */
-
-function constantTimeEqual(a, b) {
-  const left = String(a || '');
-  const right = String(b || '');
-  if (left.length !== right.length) return false;
-  let diff = 0;
-  for (let i = 0; i < left.length; i += 1) diff |= left.charCodeAt(i) ^ right.charCodeAt(i);
-  return diff === 0;
-}
 
 /**
  * 校验站点 Basic Auth。未配置账号密码时返回 null（放行）。

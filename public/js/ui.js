@@ -91,8 +91,20 @@ export function frag(...children) {
   return fragment;
 }
 
+/** 模板插值用的图标：返回 raw 包装，只能放进 tpl 里。 */
 export function icon(name, className = 'icon') {
   return raw(`<svg class="${className}"><use href="#i-${name}"/></svg>`);
+}
+
+/**
+ * 真实 DOM 节点版图标。
+ * 凡是把结果交给 replaceChildren / append / insertBefore 的地方都必须用这个，
+ * icon() 返回的是 raw 包装对象，直接塞进去会渲染成 "[object Object]"。
+ */
+export function iconNode(name, className = 'icon') {
+  const template = document.createElement('template');
+  template.innerHTML = `<svg class="${className}"><use href="#i-${name}"/></svg>`;
+  return template.content.firstElementChild;
 }
 
 export function mount(parent, node) {

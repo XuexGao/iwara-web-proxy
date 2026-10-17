@@ -66,6 +66,18 @@ const context = await browser.newContext({
 });
 const page = await context.newPage();
 
+/** 站点开了访问密码时，先过一遍，后续断言才有页面可测。 */
+async function passGate() {
+  const password = process.env.SITE_PASSWORD || '@Gao123456';
+  await page.goto(`${BASE}/`, { waitUntil: 'commit', timeout: 60000 });
+  if ((await page.locator('#pw').count()) === 0) return false;
+  await page.locator('#pw').fill(password);
+  await page.locator('#go').click();
+  await new Promise((resolve) => setTimeout(resolve, 4000));
+  return true;
+}
+await passGate();
+
 const errors = [];
 page.on('pageerror', (error) => errors.push(String(error).slice(0, 200)));
 page.on('console', (message) => {

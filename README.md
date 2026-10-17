@@ -42,6 +42,7 @@
 | 主题 | ✅ | 深色 / 浅色 / 跟随系统，工具栏一键切换 |
 | 论坛与帖子 | ✅ | 只读 |
 | 账号登录 | ✅ | 邮箱密码登录，Token 加密存放在 HttpOnly Cookie 里 |
+| 站点访问密码 | ✅ | 整站加锁，与 Iwara 账号无关，密码由 Worker 变量配置 |
 
 ---
 
@@ -84,6 +85,7 @@ npx wrangler deploy
 | 变量 | 必需 | 作用 |
 | :-- | :-- | :-- |
 | `SESSION_SECRET` | 登录功能必需 | 加密会话 Cookie 的密钥，≥16 位随机字符串 |
+| `SITE_PASSWORD` | 可选 | 站点访问密码。设了之后**任何路径**都要求先输入它，与 Iwara 账号无关 |
 | `BASIC_AUTH_USER` / `BASIC_AUTH_PASS` | 可选 | 站点级 Basic Auth，设了之后整个站点都要先过这层 |
 | `IWARA_AUTHORIZATION` | 可选 | 访客共享 Token。填了之后**未登录访客也能用搜索等功能** |
 
@@ -102,6 +104,23 @@ npx wrangler deploy
                  │
                  └──► 静态资源（HTML/CSS/JS/字体）由 Cloudflare 直接返回，不计 Worker 请求数
 ```
+
+### 站点访问密码
+
+`SITE_PASSWORD` 是「能不能打开这个站」的开关，和 Iwara 账号完全无关：
+
+```bash
+npx wrangler secret put SITE_PASSWORD
+```
+
+设了之后，未通过验证的请求**全部**返回登录页——包括页面、接口、媒体、
+以及 `/video/xxx` 这类 SPA 深层路径。通过后发一枚 AES-GCM 加密的
+HttpOnly Cookie，30 天内有效；改了密码旧 Cookie 立刻失效。
+
+想让人重新输密码，只在菜单里点「退出站点」。
+
+> ⚠️ 这个密码用 `wrangler secret` 配置，**不要**同时写进 `wrangler.jsonc` 的 `vars`，
+> 两者同名会报 `Binding name already in use`。
 
 ### 三件核心的事
 

@@ -163,6 +163,22 @@ export function isSameOriginRequest(request) {
   }
 }
 
+/**
+ * 恒定时间字符串比较：逐字符异或累加，长度不同也走完全程，
+ * 不会因为提前 return 而泄漏「前几位是对的」。
+ */
+export function constantTimeEqual(a, b) {
+  const left = String(a || '');
+  const right = String(b || '');
+  if (left.length !== right.length) {
+    // 长度不同直接返回 false 也安全：长度本身不是秘密。
+    return false;
+  }
+  let diff = 0;
+  for (let i = 0; i < left.length; i += 1) diff |= left.charCodeAt(i) ^ right.charCodeAt(i);
+  return diff === 0;
+}
+
 /* ------------------------------------------------------------------ *
  * 响应
  * ------------------------------------------------------------------ */

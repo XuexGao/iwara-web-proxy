@@ -390,12 +390,17 @@ p {
 
 .menu {
   position: relative;
+  /* 顶栏整体是一个层叠上下文，菜单面板必须显式抬高层级：
+     窄屏下搜索框会换行到第二排、且在 DOM 里排在菜单之后，
+     不加 z-index 的话它会盖住面板，点击就打到输入框上了。 */
+  z-index: 2;
 }
 
 .menu__panel {
   position: absolute;
   right: 0;
   top: calc(100% + 8px);
+  z-index: 3;
   min-width: 216px;
   padding: 6px;
   background: var(--ink-1);
@@ -956,20 +961,25 @@ select.input {
 .card__meta {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--paper-3);
+  min-width: 0;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .card__author {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   color: var(--celadon);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 0 1 auto;
 }
 
 .card__author:hover {
@@ -984,6 +994,8 @@ select.input {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  flex: none;
+  white-space: nowrap;
 }
 
 .card__stat .icon {
@@ -2095,6 +2107,16 @@ select.input {
   :root {
     --topbar-h: 52px;
   }
+  /* 窄屏下顶栏换行，搜索框会占满第二排。菜单面板改成固定定位，
+     贴住视口右上角，既不会被搜索框压住，也不会溢出屏幕右缘。 */
+  .menu__panel {
+    position: fixed;
+    top: calc(var(--topbar-h) + 6px);
+    right: var(--pad);
+    left: auto;
+    max-height: calc(100vh - var(--topbar-h) - 20px);
+    overflow-y: auto;
+  }
   .topbar {
     flex-wrap: wrap;
     height: auto;
@@ -2134,6 +2156,23 @@ select.input {
   }
   main {
     padding-bottom: 130px;
+  }
+}
+
+/* 窄屏下卡片元信息放不下时，优先保住作者名与播放量，
+   把次要统计（点赞、评论）收起来，而不是让它们换行把卡片撑高。 */
+@media (max-width: 560px) {
+  .card__meta .card__stat[data-stat='heart'],
+  .card__meta .card__stat[data-stat='comment'] {
+    display: none;
+  }
+  .card__meta {
+    font-size: 11px;
+    gap: 7px;
+  }
+  .card__stat .icon {
+    width: 12px;
+    height: 12px;
   }
 }
 

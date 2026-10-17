@@ -34,8 +34,6 @@ export async function renderImages(ctx) {
     desc: '画师上传的插画与漫画。点进去可以逐张看原图。'
   });
 
-  const countNode = tpl`<span class="lede__count"></span>`;
-  head.append(countNode);
 
   const sorts = [
     { id: 'trending', label: '本周热门' },
@@ -60,7 +58,6 @@ export async function renderImages(ctx) {
     emptyMessage: '换个排序看看，或者把 R18 开关打开。',
     fetchPage: async (page, limit) => {
       const data = await fetchImages({ page, limit, sort, rating: ratingParam() });
-      if (page === 0) countNode.replaceChildren(tpl`<b>${formatCount(data?.count)}</b><br />个图库`);
       return data;
     }
   });
@@ -321,8 +318,6 @@ export async function renderPlaylists(ctx) {
     title: '播放列表',
     desc: '作者自己整理的合集，通常围绕一个系列或一个题材。'
   });
-  const countNode = tpl`<span class="lede__count"></span>`;
-  head.append(countNode);
 
   const feed = createFeed({
     limit: 32,
@@ -331,7 +326,6 @@ export async function renderPlaylists(ctx) {
     emptyMessage: '换一页看看，或者从作者页进入他们自己的合集。',
     fetchPage: async (page, limit) => {
       const data = await fetchPlaylists({ page, limit });
-      if (page === 0) countNode.replaceChildren(tpl`<b>${formatCount(data?.count)}</b><br />个列表`);
       return data;
     }
   });

@@ -65,8 +65,6 @@ export async function renderSubscriptions(ctx) {
     title: '订阅',
     desc: `你关注的作者最近发布的${kind === 'images' ? '图库' : '视频'}，按${SORTS.find((s) => s.id === sort)?.label || '最新'}排序。`
   });
-  const countNode = tpl`<span class="lede__count"></span>`;
-  head.append(countNode);
 
   const kindChips = tpl`<div class="chips chips--scroll"></div>`;
   for (const option of [
@@ -110,11 +108,6 @@ export async function renderSubscriptions(ctx) {
         };
         const data =
           kind === 'images' ? await fetchImages(params) : await fetchVideos(params);
-        if (page === 0) {
-          countNode.replaceChildren(
-            tpl`<b>${formatCount(data?.count)}</b><br />件新作品`
-          );
-        }
         return data;
       }
     });

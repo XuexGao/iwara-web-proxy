@@ -174,7 +174,13 @@ export function bootstrapTheme() {
  * 会话
  * ------------------------------------------------------------------ */
 
-let session = { ready: false, authenticated: false, user: null, loginEnabled: false };
+let session = {
+  ready: false,
+  authenticated: false,
+  user: null,
+  loginEnabled: false,
+  gateRequired: false
+};
 const sessionListeners = new Set();
 
 export function getSession() {
@@ -217,14 +223,27 @@ export async function refreshSession() {
 }
 
 export async function loadAuthConfig() {
-  try {
-    const response = await fetch('/api/auth/config');
-    const data = await response.json();
-    session = { ...session, loginEnabled: !!data.loginEnabled, sharedToken: !!data.sharedToken };
-    emitSession();
-  } catch {
-    /* 忽略 */
-  }
+  const [auth, gate] = await Promise.all([
+    fetch('/api/auth/config')
+      .then((response) => response.json())
+      .catch(() => null),
+    fetch('/api/gate/status')
+      .then((response) => response.json())
+      .catch(() => null)
+  ]);
+  session = {
+    ...session,
+    loginEnabled: !!auth?.loginEnabled,
+    sharedToken: !!auth?.sharedToken,
+    gateRequired: !!gate?.required
+  };
+  emitSession();
+}
+
+/** 退出站点访问密码（下次访问需要重新输入）。 */
+export async function gateLogout() {
+  await authRequest('/api/gate/logout', { method: 'POST' }).catch(() => null);
+  location.reload();
 }
 
 export async function login(email, password) {

@@ -24,6 +24,14 @@ import {
 import { handleSaltStatus, handleSources } from './sources.js';
 import { isMutating, isSameOriginRequest, json } from './util.js';
 import { verifyBasicAuth } from './upstream.js';
+import {
+  gateConfig,
+  gateEnabled,
+  gateResponse,
+  handleGateLogin,
+  handleGateLogout,
+  hasGateAccess
+} from './gate.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -33,6 +41,13 @@ export default {
     const denied = verifyBasicAuth(request, env);
     if (denied) return denied;
 
+    // 1. 站点访问密码：必须在所有路由之前，连 API 与媒体一起挡住，
+    //    否则知道直链的人可以绕开登录页直接播放。
+    if (gateEnabled(env)) {
+      const gateAllowed = await handleGateRoutes(request, env, url);
+      if (gateAllowed) return gateAllowed;
+    }
+
     try {
       if (url.pathname.startsWith('/api/')) return await routeApi(request, env, url);
       if (url.pathname.startsWith('/media/')) return await handleMedia(request, env, url);
@@ -41,10 +56,68 @@ export default {
       return json({ error: '服务器内部错误。' }, 500);
     }
 
-    // 静态资源 / SPA 回退。
+    // 已通过站点密码：静态资源与 SPA 回退交给 Assets。
+    // （开启密码时所有请求都会先到这里，所以这一步是必须的。）
     return env.ASSETS.fetch(request);
   }
 };
+
+/* ------------------------------------------------------------------ *
+ * 站点访问密码
+ * ------------------------------------------------------------------ */
+
+/**
+ * 处理与密码有关的三个入口，其余请求交给返回值 null 继续往下走。
+ * 返回非 null 表示已经处理完毕。
+ */
+async function handleGateRoutes(request, env, url) {
+  const path = url.pathname;
+
+  if (path === '/api/gate/status') {
+    if (request.method !== 'GET') return json({ error: '方法不允许。' }, 405);
+    return json({
+      ...gateConfig(env),
+      authorised: await hasGateAccess(request, env)
+    });
+  }
+
+  if (path === '/api/gate/login') {
+    if (request.method !== 'POST') return json({ error: '方法不允许。' }, 405);
+    const guard = guardMutation(request);
+    if (guard) return guard;
+    const result = await handleGateLogin(request, env);
+    const headers = new Headers({
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store'
+    });
+    if (result.setCookie) headers.append('set-cookie', result.setCookie);
+    if (result.ok) {
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+    }
+    return new Response(JSON.stringify({ ok: false, error: result.error }), {
+      status: result.status || 401,
+      headers
+    });
+  }
+
+  if (path === '/api/gate/logout') {
+    if (request.method !== 'POST') return json({ error: '方法不允许。' }, 405);
+    const guard = guardMutation(request);
+    if (guard) return guard;
+    const result = await handleGateLogout(env);
+    const headers = new Headers({
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store'
+    });
+    if (result.setCookie) headers.append('set-cookie', result.setCookie);
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+  }
+
+  // 已通过就放行。
+  if (await hasGateAccess(request, env)) return null;
+
+  return gateResponse(request, { siteName: env?.SITE_NAME });
+}
 
 /* ------------------------------------------------------------------ *
  * 写操作的 CSRF 防护

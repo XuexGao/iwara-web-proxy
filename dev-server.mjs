@@ -70,7 +70,9 @@ const ENV = {
   API_CACHE_TTL: '30',
   IMAGE_CACHE_TTL: '604800',
   VIDEO_CACHE_TTL: '3600',
-  SESSION_SECRET: 'dev-only-session-secret-please-change-me'
+  SESSION_SECRET: 'dev-only-session-secret-please-change-me',
+  // 本地默认不开启密码，验证密码流程时用 SITE_PASSWORD=xxx node dev-server.mjs
+  SITE_PASSWORD: process.env.SITE_PASSWORD || ''
 };
 
 /* ---------------- 静态资源 ---------------- */

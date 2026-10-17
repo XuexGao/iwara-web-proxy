@@ -34,7 +34,8 @@ export function userLink(user) {
 
 function metaStat(iconName, value) {
   if (!value) return null;
-  return tpl`<span class="card__stat">${icon(iconName)}${formatCount(value)}</span>`;
+  // data-stat 让窄屏 CSS 能精确地选择要隐藏哪几项。
+  return tpl`<span class="card__stat" data-stat="${iconName}">${icon(iconName)}${formatCount(value)}</span>`;
 }
 
 /**

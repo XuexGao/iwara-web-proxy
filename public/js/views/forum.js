@@ -62,8 +62,6 @@ export async function renderForum(ctx) {
     title: '论坛',
     desc: 'Iwara 的社区讨论区。只读浏览，发言请到官网。'
   });
-  const countNode = tpl`<span class="lede__count"></span>`;
-  head.append(countNode);
 
   let sort = ctx.query.get('sort') === 'popular' ? 'popular' : 'latest';
   const chips = tpl`<div class="chips chips--scroll"></div>`;
@@ -84,7 +82,6 @@ export async function renderForum(ctx) {
     emptyMessage: '过一会儿再来看看，或者去帖子列表转转。',
     fetchPage: async (page, limit) => {
       const data = await fetchForumThreads({ page, limit });
-      if (page === 0) countNode.replaceChildren(tpl`<b>${formatCount(data?.count)}</b><br />个主题`);
       return data;
     }
   });
@@ -109,8 +106,6 @@ export async function renderForumCategory(ctx, { category }) {
     title: category,
     desc: '这个分区下的主题。'
   });
-  const countNode = tpl`<span class="lede__count"></span>`;
-  head.append(countNode);
 
   const feed = createFeed({
     columns: 'rowlist',
@@ -120,7 +115,6 @@ export async function renderForumCategory(ctx, { category }) {
     emptyMessage: '换个分区，或者回到论坛总表。',
     fetchPage: async (page, limit) => {
       const data = await fetchForumThreads({ page, limit, category });
-      if (page === 0) countNode.replaceChildren(tpl`<b>${formatCount(data?.count)}</b><br />个主题`);
       return data;
     }
   });
@@ -240,8 +234,6 @@ export async function renderPosts(ctx) {
     title: '帖子',
     desc: '比论坛主题更短的内容，通常是作者公告或随手分享。'
   });
-  const countNode = tpl`<span class="lede__count"></span>`;
-  head.append(countNode);
 
   const feed = createFeed({
     columns: 'rowlist',
@@ -251,7 +243,6 @@ export async function renderPosts(ctx) {
     emptyMessage: '过一会儿再来看看。',
     fetchPage: async (page, limit) => {
       const data = await fetchPosts({ page, limit });
-      if (page === 0) countNode.replaceChildren(tpl`<b>${formatCount(data?.count)}</b><br />条帖子`);
       return data;
     }
   });
