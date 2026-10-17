@@ -1,0 +1,41 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "iwara-web",
+  "main": "src/index.js",
+  "compatibility_date": "2026-03-08",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // 只有接口与媒体走 Worker，静态资源由 Cloudflare 直接回源，不消耗 Worker 请求数。
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/media/*"]
+  },
+
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
+    }
+  },
+
+  "vars": {
+    // 站点名称，显示在标题与页头。
+    "SITE_NAME": "Iwara 映像",
+    // 默认内容来源站点：main = www.iwara.tv，ai = www.iwara.ai
+    "DEFAULT_SITE": "main",
+    // 全站 Basic Auth 保护，设置后整个站点（含接口与媒体）都需要登录才能访问。
+    // 公开部署强烈建议开启，避免额度被陌生人消耗。用 wrangler secret put 配置更安全。
+    "BASIC_AUTH_USER": "",
+    "BASIC_AUTH_PASS": "",
+    // 访客共享 Token（可选）：填入 Iwara 的 access token 后，未登录访客也能使用搜索等功能。
+    // 更推荐用 wrangler secret put IWARA_AUTHORIZATION 配置。
+    "IWARA_AUTHORIZATION": "",
+    // 上游接口缓存秒数，用于节省 Worker 请求数。设为 0 关闭。
+    "API_CACHE_TTL": "30",
+    // 封面图缓存秒数。
+    "IMAGE_CACHE_TTL": "604800"
+  }
+}

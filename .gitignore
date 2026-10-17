@@ -1,0 +1,13 @@
+node_modules/
+.wrangler/
+.dev.vars
+.env
+.env.*
+dist/
+*.log
+.DS_Store
+
+# 本地检查工具与临时产物
+tools/dbg*.mjs
+tools/shots.mjs
+tools/prod-check.mjs

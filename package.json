@@ -1,0 +1,16 @@
+{
+  "name": "iwara-web-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "在 Cloudflare Workers 上运行的 Iwara 网页版：API / 视频 / 图片全量反代，支持登录、搜索、播放与收藏。",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "secret": "wrangler secret put SESSION_SECRET"
+  },
+  "devDependencies": {
+    "wrangler": "^4.126.0"
+  }
+}

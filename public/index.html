@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Iwara 映像 · 在线浏览与播放</title>
+<meta name="description" content="通过 Cloudflare 边缘网络浏览与播放 Iwara 作品：视频、图库、标签、作者与播放列表。" />
+<meta name="theme-color" content="#100D16" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="preload" href="/fonts/fraunces-var.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/plexsans-var.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="stylesheet" href="/css/app.css" />
+</head>
+<body>
+
+<!-- 图标精灵：全部内联，不依赖外部图标库 -->
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.2-4.2"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l13-7.5z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 4.5v15M16 4.5v15"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-7.5-9.5A4.4 4.4 0 0 1 12 7.6a4.4 4.4 0 0 1 7.5 2.9C19.5 15.4 12 20 12 20z"/></symbol>
+  <symbol id="i-comment" viewBox="0 0 24 24"><path d="M20 12.5c0 4-3.6 7-8 7a9 9 0 0 1-2.6-.4L5 21l1.2-3.4A6.7 6.7 0 0 1 4 12.5c0 4 3.6-7 8-7s8 3 8 7z"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c1-3.6 3.8-5.4 7.2-5.4S18.2 16.4 19.2 20"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M11 3H4v7l9.6 9.6a2 2 0 0 0 2.8 0l4.2-4.2a2 2 0 0 0 0-2.8z"/><circle cx="7.6" cy="6.6" r="1.3" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.4"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.4"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.4"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.4"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M4 6.5h16M4 12h16M4 17.5h16"/></symbol>
+  <symbol id="i-forum" viewBox="0 0 24 24"><path d="M4 5.5h16v10H9l-5 4z"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 4l2.4 5 5.4.7-4 3.7 1 5.3L12 16.2 7.2 18.7l1-5.3-4-3.7 5.4-.7z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.2"/><path d="M12 7.6V12l3 2"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v10m0 0l-3.6-3.6M12 14l3.6-3.6M5 19h14"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 15v5h-5M15 4h5v5M9 20H4v-5"/></symbol>
+  <symbol id="i-volume" viewBox="0 0 24 24"><path d="M5 9.5h3L12 6v12l-4-3.5H5z"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6"/></symbol>
+  <symbol id="i-mute" viewBox="0 0 24 24"><path d="M5 9.5h3L12 6v12l-4-3.5H5z"/><path d="M16 10l4 4m0-4l-4 4"/></symbol>
+  <symbol id="i-pip" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><rect x="12" y="12" width="7" height="5.5" rx="1.2" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.8"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4L18 18M18 6l-1.6 1.6M7.6 16.4L6 18"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 5.5H6.5v13H14"/><path d="M12.5 12h8m0 0l-3-3m3 3l-3 3"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5l7 2.6v5.2c0 4.2-3 7.5-7 9.2-4-1.7-7-5.2-7-9.2V6.1z"/></symbol>
+</svg>
+
+<header class="topbar">
+  <a class="brand" href="#/" aria-label="回到首页">
+    <span class="brand__mark">Iwara</span>
+    <span class="brand__sub">映像</span>
+  </a>
+
+  <form class="searchbar" id="global-search" role="search">
+    <svg class="icon"><use href="#i-search"/></svg>
+    <input id="global-search-input" type="search" name="q" placeholder="搜索作品、作者、标签…" autocomplete="off" enterkeyhint="search" />
+    <kbd>/</kbd>
+  </form>
+
+  <nav class="topnav" id="topnav">
+    <a href="#/" data-nav="home"><svg class="icon"><use href="#i-grid"/></svg><span>首页</span></a>
+    <a href="#/tags" data-nav="tags"><svg class="icon"><use href="#i-tag"/></svg><span>标签</span></a>
+    <a href="#/images" data-nav="images"><svg class="icon"><use href="#i-list"/></svg><span>图库</span></a>
+    <a href="#/forum" data-nav="forum"><svg class="icon"><use href="#i-forum"/></svg><span>论坛</span></a>
+  </nav>
+
+  <div class="topbar__end">
+    <div class="menu" id="account-menu">
+      <button class="account" id="account-button" type="button" aria-haspopup="menu" aria-expanded="false">
+        <span class="account__avatar" id="account-avatar"><svg class="icon"><use href="#i-user"/></svg></span>
+        <span class="account__name" id="account-name">未登录</span>
+      </button>
+      <div class="menu__panel" id="account-panel" role="menu" hidden>
+        <div class="menu__head" id="account-head"></div>
+        <a role="menuitem" href="#/library/favorites"><svg class="icon"><use href="#i-star"/></svg>我的收藏</a>
+        <a role="menuitem" href="#/library/history"><svg class="icon"><use href="#i-clock"/></svg>观看历史</a>
+        <a role="menuitem" href="#/settings"><svg class="icon"><use href="#i-settings"/></svg>设置</a>
+        <button role="menuitem" id="logout-button" type="button" hidden><svg class="icon"><use href="#i-logout"/></svg>退出登录</button>
+        <a role="menuitem" href="#/login" id="login-link"><svg class="icon"><use href="#i-shield"/></svg>登录 Iwara</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main id="view" tabindex="-1"></main>
+
+<footer class="sitefoot">
+  <span>内容来自 <strong>iwara.tv</strong>，本站只做加速转发，不存储任何作品。</span>
+  <a href="#/about">关于与部署</a>
+</footer>
+
+<!-- 常驻迷你播放器 -->
+<div class="mini" id="mini" hidden>
+  <video id="mini-video" playsinline></video>
+  <div class="mini__bar">
+    <div class="mini__meta">
+      <a class="mini__title" id="mini-title" href="#"></a>
+      <span class="mini__author" id="mini-author"></span>
+    </div>
+    <div class="mini__actions">
+      <button type="button" data-mini="toggle" aria-label="播放或暂停"><svg class="icon"><use href="#i-play"/></svg></button>
+      <button type="button" data-mini="expand" aria-label="回到播放页"><svg class="icon"><use href="#i-expand"/></svg></button>
+      <button type="button" data-mini="close" aria-label="关闭"><svg class="icon"><use href="#i-close"/></svg></button>
+    </div>
+    <div class="mini__progress"><i id="mini-progress"></i></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div class="modal" id="modal" hidden></div>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>

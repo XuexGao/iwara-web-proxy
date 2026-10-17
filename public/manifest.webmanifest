@@ -1,0 +1,17 @@
+{
+  "name": "Iwara 映像",
+  "short_name": "Iwara 映像",
+  "description": "通过 Cloudflare 边缘网络浏览与播放 Iwara 作品。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#100D16",
+  "theme_color": "#100D16",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

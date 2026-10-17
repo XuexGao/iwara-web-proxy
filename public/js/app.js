@@ -1,0 +1,175 @@
+/**
+ * 应用引导：路由注册、顶栏交互、会话状态。
+ */
+
+import { avatarUrl } from './api.js';
+import { stopAllPreviews } from './cards-preview.js';
+import { mini, playback } from './player.js';
+import router from './router.js';
+import {
+  getSession,
+  loadAuthConfig,
+  logout,
+  onSessionChange,
+  refreshSession,
+  setSetting,
+  getSetting
+} from './store.js';
+import { icon, tpl } from './ui.js';
+
+import { renderHome } from './views/home.js';
+import { renderWatch } from './views/watch.js';
+import { renderSearch } from './views/search.js';
+import { renderTag, renderTags } from './views/tags.js';
+import { renderGallery, renderImages, renderPlaylist, renderPlaylists } from './views/gallery.js';
+import { renderProfile } from './views/profile.js';
+import { renderForum, renderForumCategory, renderForumThread, renderPosts } from './views/forum.js';
+import { renderAbout, renderLibrary, renderSettings } from './views/library.js';
+import { renderLogin } from './views/login.js';
+
+/* ------------------------------------------------------------------ *
+ * 路由表
+ * ------------------------------------------------------------------ */
+
+router
+  .route('/', renderHome)
+  .route('/search', renderSearch)
+  .route('/tags', renderTags)
+  .route('/tag/:id', renderTag)
+  .route('/images', renderImages)
+  .route('/image/:id', renderGallery)
+  .route('/playlists', renderPlaylists)
+  .route('/playlist/:id', renderPlaylist)
+  .route('/video/:id', renderWatch)
+  .route('/user/:username', renderProfile)
+  .route('/forum', renderForum)
+  .route('/forum/:category', renderForumCategory)
+  .route('/forum/:category/:threadId', renderForumThread)
+  .route('/posts', renderPosts)
+  .route('/library/:kind', renderLibrary)
+  .route('/settings', renderSettings)
+  .route('/about', renderAbout)
+  .route('/login', renderLogin)
+  .setFallback((ctx) =>
+    tpl`
+      <div class="state">
+        <div class="state__title">这个地址不存在</div>
+        <p>检查一下链接，或者回到首页重新找。</p>
+        <a class="btn btn--sm" href="#/">回到首页</a>
+      </div>`
+  )
+  .setBeforeEach(() => {
+    stopAllPreviews();
+  });
+
+/* ------------------------------------------------------------------ *
+ * 顶栏
+ * ------------------------------------------------------------------ */
+
+const searchForm = document.getElementById('global-search');
+const searchInput = document.getElementById('global-search-input');
+
+searchForm?.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const query = searchInput.value.trim();
+  if (!query) return;
+  router.navigate(`/search?q=${encodeURIComponent(query)}`);
+});
+
+document.addEventListener('keydown', (event) => {
+  const target = event.target;
+  if (target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+  if (event.key === '/' && !event.metaKey && !event.ctrlKey) {
+    event.preventDefault();
+    searchInput?.focus();
+  }
+});
+
+const accountButton = document.getElementById('account-button');
+const accountPanel = document.getElementById('account-panel');
+
+accountButton?.addEventListener('click', (event) => {
+  event.stopPropagation();
+  const open = accountPanel.hidden;
+  accountPanel.hidden = !open;
+  accountButton.setAttribute('aria-expanded', String(open));
+});
+
+document.addEventListener('click', () => {
+  if (accountPanel && !accountPanel.hidden) {
+    accountPanel.hidden = true;
+    accountButton?.setAttribute('aria-expanded', 'false');
+  }
+});
+
+accountPanel?.addEventListener('click', (event) => event.stopPropagation());
+
+document.getElementById('logout-button')?.addEventListener('click', async () => {
+  await logout();
+  accountPanel.hidden = true;
+  router.navigate('/');
+  router.reload();
+});
+
+/* ------------------------------------------------------------------ *
+ * 会话渲染
+ * ------------------------------------------------------------------ */
+
+function renderAccount(session) {
+  const nameNode = document.getElementById('account-name');
+  const avatarNode = document.getElementById('account-avatar');
+  const head = document.getElementById('account-head');
+  const logoutButton = document.getElementById('logout-button');
+  const loginLink = document.getElementById('login-link');
+
+  if (session.authenticated && session.user) {
+    nameNode.textContent = session.user.name || session.user.username || '已登录';
+    avatarNode.replaceChildren(
+      tpl`<img src="${avatarUrl(session.user)}" alt="" />`
+    );
+    head.replaceChildren(
+      tpl`<strong>${session.user.name || session.user.username}</strong><span>@${session.user.username || ''}</span>`
+    );
+    logoutButton.hidden = false;
+    loginLink.hidden = true;
+  } else {
+    nameNode.textContent = '未登录';
+    avatarNode.replaceChildren(icon('user'));
+    head.replaceChildren(
+      session.loginEnabled
+        ? tpl`<strong>未登录</strong><span>登录后可搜索、收藏与评论</span>`
+        : tpl`<strong>未登录</strong><span>本实例未开放登录</span>`
+    );
+    logoutButton.hidden = true;
+    loginLink.hidden = !session.loginEnabled;
+  }
+}
+
+onSessionChange(renderAccount);
+
+/* ------------------------------------------------------------------ *
+ * 离开页面前：把正在播放的视频交给迷你播放器
+ * ------------------------------------------------------------------ */
+
+window.addEventListener('beforeunload', () => {
+  if (playback.video && !playback.video.paused) {
+    // 浏览器会阻止后台播放，这里只记录进度。
+    setSetting('volume', playback.video.volume);
+  }
+});
+
+/* ------------------------------------------------------------------ *
+ * 启动
+ * ------------------------------------------------------------------ */
+
+(async function boot() {
+  renderAccount(getSession());
+  // 两个请求并发：登录能力来自 /api/auth/config，会话来自 /api/auth/me。
+  await Promise.all([loadAuthConfig(), refreshSession()]);
+  await router.start();
+
+  // 迷你播放器状态在刷新后无法恢复，隐藏占位。
+  if (!mini.active) document.getElementById('mini').hidden = true;
+})();
+
+export { playback };
