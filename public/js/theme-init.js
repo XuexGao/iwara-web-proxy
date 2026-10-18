@@ -6,7 +6,9 @@
  */
 (function () {
   try {
-    var saved = JSON.parse(localStorage.getItem('iwara.theme.v1') || 'null');
+    // 主题存成裸字符串（'dark'），这里同时兼容带引号的历史写法。
+    var saved = localStorage.getItem('iwara.theme.v1') || '';
+    if (saved.charAt(0) === '"') { try { saved = JSON.parse(saved); } catch (e) { saved = ''; } }
     var pref = saved === 'light' || saved === 'dark' ? saved : null;
     if (!pref) {
       pref = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';

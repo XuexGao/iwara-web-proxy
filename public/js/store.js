@@ -49,6 +49,31 @@ function readJson(key, fallback) {
  */
 let storageState = { ok: true, reason: '' };
 
+/**
+ * 读一个标量字符串设置。
+ *
+ * 主题这类存的就是 'dark' 这种裸字符串：用 readJson 会因为"不是对象"
+ * 被当成没有值。这里同时兼容历史上写成 JSON 字符串（带引号）的存法，
+ * 老用户不会丢设置。
+ */
+function readScalar(key, fallback = null) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return fallback;
+    if (raw.startsWith('"')) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed === 'string') return parsed;
+      } catch {
+        /* 落回原值 */
+      }
+    }
+    return raw;
+  } catch {
+    return fallback;
+  }
+}
+
 function writeJson(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
@@ -147,7 +172,12 @@ export function applyTheme() {
 export function setTheme(value) {
   const next = ['system', 'dark', 'light'].includes(value) ? value : 'system';
   setSetting('theme', next);
-  writeJson(THEME_KEY, next);
+  // 单独存一份裸字符串，给首帧前那个轻量脚本用（它不该依赖整个 store）。
+  try {
+    localStorage.setItem(THEME_KEY, next);
+  } catch {
+    /* 存不下就不存，settings 里那份还在 */
+  }
   applyTheme();
   return next;
 }
@@ -163,7 +193,10 @@ media.addEventListener('change', () => {
 
 /** 在首帧之前就跑一次，避免浅色主题下闪一下深色。 */
 export function bootstrapTheme() {
-  const saved = readJson(THEME_KEY, null);
+  // ⚠️ 必须用 readScalar：主题存的是 'dark' 这种裸字符串，
+  // 之前用 readJson 读会把非对象结果一律当成 null，
+  // 于是保存过的主题在下次启动时被忽略、默默退回跟随系统。
+  const saved = readScalar(THEME_KEY, null);
   if (saved === 'light' || saved === 'dark' || saved === 'system') {
     settings = { ...settings, theme: saved };
   }

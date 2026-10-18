@@ -1075,12 +1075,19 @@ select.input {
   background: #000;
   border-radius: var(--r);
   overflow: hidden;
+  /* isolation 建独立层叠上下文：部分 WebKit 版本里父级 overflow:hidden
+     不会裁掉 <video>，四角会露出直角。配合下面给 stage/video 继承圆角，
+     在 Safari 上也不会溢出。 */
+  isolation: isolate;
+  transform: translateZ(0);
 }
 
 .player__stage {
   position: relative;
   aspect-ratio: 16 / 9;
   background: #000;
+  border-radius: inherit;
+  overflow: hidden;
 }
 
 .player__stage video {
@@ -1088,6 +1095,9 @@ select.input {
   height: 100%;
   object-fit: contain;
   background: #000;
+  /* 直接裁 video 自身，覆盖 WebKit 不裁子元素的老问题。 */
+  border-radius: inherit;
+  display: block;
 }
 
 .player__hit {
@@ -1358,6 +1368,70 @@ select.input {
   color: var(--rose);
 }
 
+/* 手势反馈：长按加速时显示倍速徽章，加速中给画面一圈提示色。 */
+.player__gesture {
+  position: absolute;
+  left: 50%;
+  top: 22px;
+  z-index: 8;
+  padding: 7px 14px;
+  background: rgba(9, 7, 13, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: #fff;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -6px);
+  transition: opacity 0.18s var(--ease), transform 0.18s var(--ease);
+  backdrop-filter: blur(6px);
+}
+
+.player__gesture.is-on {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.player.is-boosting {
+  box-shadow: inset 0 0 0 2px rgba(255, 78, 124, 0.8);
+}
+
+.player.is-boosting .player__controls {
+  opacity: 1;
+}
+
+/* 移动端：进度条要更粗更好抓，滑动条也加长。 */
+@media (max-width: 680px) {
+  .player__controls {
+    gap: 8px;
+    padding: 22px 12px 10px;
+  }
+  .player__scrub {
+    height: 34px;
+  }
+  .player__track {
+    height: 6px;
+  }
+  .player__scrub:hover .player__track {
+    height: 6px;
+  }
+  .player__knob {
+    width: 14px;
+    height: 14px;
+    margin-left: -7px;
+    transform: translateY(-50%) scale(1);
+  }
+  .player__time {
+    font-size: 11.5px;
+  }
+  /* 音量滑条在手机上没意义（硬件键更好用），收起来给进度条腾地方。 */
+  .player__volume input {
+    display: none;
+  }
+}
+
 /* ---------------------------------------------------------------- 迷你播放器 */
 
 /* 播放器与迷你播放器内部强制深色，与主题解耦。 */
@@ -1487,6 +1561,23 @@ select.input {
   font-family: var(--font-mono);
   font-size: 12.5px;
   color: var(--paper-3);
+}
+
+/* 每个统计项内部也要 flex 对齐：inline 的 svg 会按基线排，
+   和数字对不齐（图标偏上、数字偏下）。 */
+.watch__stats > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1.2;
+}
+
+.watch__stats .icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  /* 轻微下移，让图标视觉中心对齐等宽数字的字腰。 */
+  transform: translateY(-0.5px);
 }
 
 .watch__actions {

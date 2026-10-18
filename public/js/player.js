@@ -7,7 +7,7 @@
 
 import { formatDuration } from './api.js';
 import { getResume, getSetting, saveResume, setSetting } from './store.js';
-import { icon, raw, tpl } from './ui.js';
+import { icon, toast, tpl } from './ui.js';
 
 /** 当前正在播放的元素；跨路由复用，避免切页面重载。 */
 export const playback = {
@@ -182,8 +182,114 @@ export function createPlayer(options) {
   };
 
   toggleButton.addEventListener('click', toggle);
-  hit.addEventListener('click', toggle);
-  hit.addEventListener('dblclick', () => toggleFullscreen());
+
+  /* ---------------- 手势：单击暂停 / 双击全屏 / 长按 2 倍速 ----------------
+     双击判定必须自己做延时等待：原生 dblclick 和 click 一起用的话，
+     第一次点击会立刻触发暂停，两次连点的结果就变成了「暂停又播放」。
+     所以这里用 260ms 的等待窗口区分单击与双击。 */
+
+  const DOUBLE_CLICK_DELAY = 260;
+  const LONG_PRESS_DELAY = 320;
+  let clickTimer = 0;
+  let pressTimer = 0;
+  let longPressing = false;
+  let pressedAt = 0;
+  let startPoint = null;
+
+  function showGestureBadge(text) {
+    let badge = element.querySelector('.player__gesture');
+    if (!badge) {
+      badge = tpl`<div class="player__gesture"></div>`;
+      stage.append(badge);
+    }
+    badge.textContent = text;
+    badge.classList.add('is-on');
+    clearTimeout(badge.__timer);
+    badge.__timer = setTimeout(() => badge.classList.remove('is-on'), 900);
+  }
+
+  function startBoost() {
+    if (video.paused) return;
+    longPressing = true;
+    video.playbackRate = 2;
+    element.classList.add('is-boosting');
+    showGestureBadge('2× 快进中');
+  }
+
+  function stopBoost() {
+    clearTimeout(pressTimer);
+    if (!longPressing) return;
+    longPressing = false;
+    video.playbackRate = 1;
+    element.classList.remove('is-boosting');
+    showGestureBadge('恢复正常速度');
+  }
+
+  const onPointerDown = (event) => {
+    // 只处理主键/单指，且不要在进度条、按钮、清晰度面板上误触发
+    if (event.button !== undefined && event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest('.player__controls, .quality')) return;
+
+    pressedAt = Date.now();
+    startPoint = { x: event.clientX, y: event.clientY };
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(startBoost, LONG_PRESS_DELAY);
+  };
+
+  const onPointerMove = (event) => {
+    if (!startPoint) return;
+    const moved =
+      Math.abs(event.clientX - startPoint.x) > 12 || Math.abs(event.clientY - startPoint.y) > 12;
+    // 手指在屏幕上滑动（想拖进度）时不该被当成"长按"
+    if (moved) {
+      clearTimeout(pressTimer);
+      if (longPressing) stopBoost();
+    }
+  };
+
+  const onPointerUp = (event) => {
+    if (!startPoint) return;
+    const heldLong = longPressing;
+    const elapsed = Date.now() - pressedAt;
+    startPoint = null;
+    clearTimeout(pressTimer);
+
+    if (heldLong) {
+      stopBoost();
+      return;
+    }
+    // 按住太久但没进入加速（例如刚好卡在阈值上），也不当作点击
+    if (elapsed > LONG_PRESS_DELAY + 120) return;
+    if (event.target instanceof Element && event.target.closest('.player__controls, .quality')) return;
+
+    // 双击窗口：等一小会儿看有没有第二次点击
+    if (clickTimer) {
+      clearTimeout(clickTimer);
+      clickTimer = 0;
+      toggleFullscreen();
+      return;
+    }
+    clickTimer = setTimeout(() => {
+      clickTimer = 0;
+      toggle();
+    }, DOUBLE_CLICK_DELAY);
+  };
+
+  hit.addEventListener('pointerdown', onPointerDown);
+  hit.addEventListener('pointermove', onPointerMove);
+  hit.addEventListener('pointerup', onPointerUp);
+  hit.addEventListener('pointercancel', () => {
+    startPoint = null;
+    clearTimeout(pressTimer);
+    if (longPressing) stopBoost();
+  });
+  hit.addEventListener('pointerleave', () => {
+    startPoint = null;
+    clearTimeout(pressTimer);
+    if (longPressing) stopBoost();
+  });
+  // 长按可能选中文字/触发右键菜单，一并拦住
+  hit.addEventListener('contextmenu', (event) => event.preventDefault());
 
   muteButton.addEventListener('click', () => {
     video.muted = !video.muted;
@@ -267,11 +373,33 @@ export function createPlayer(options) {
 
   element.querySelector('[data-act="fullscreen"]').addEventListener('click', toggleFullscreen);
   element.querySelector('[data-act="pip"]').addEventListener('click', async () => {
+    const supported = typeof video.requestPictureInPicture === 'function';
+    if (!supported) {
+      // 之前这里是静默失败，点了没反应最容易被当成 bug。
+      // 明确说出原因：iOS Safari 就一直不支持网页画中画，只能用全屏。
+      toast('这个浏览器不支持网页画中画，可以改用全屏（或点视频右上角）', 'error', 4200);
+      return;
+    }
     try {
-      if (document.pictureInPictureElement) await document.exitPictureInPicture();
-      else await video.requestPictureInPicture();
-    } catch {
-      /* 浏览器不支持时忽略 */
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else {
+        // 画中画要求视频正在播放，且不能是静音占位状态
+        if (video.readyState < 1) {
+          toast('视频还没就绪，稍等一下再试', 'error');
+          return;
+        }
+        await video.requestPictureInPicture();
+      }
+    } catch (error) {
+      const reason = String(error?.message || '');
+      toast(
+        reason.toLowerCase().includes('not allowed') || error?.name === 'NotAllowedError'
+          ? '浏览器拒绝了画中画，先点一下视频开始播放再试'
+          : '画中画打开失败，可以改用全屏',
+        'error',
+        4200
+      );
     }
   });
 
