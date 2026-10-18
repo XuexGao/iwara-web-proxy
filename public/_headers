@@ -11,11 +11,15 @@
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable
 
+# JS/CSS 只缓存 60 秒并强制协商：
+# index.html 引用的是不带版本号的固定路径，如果给 JS/CSS 设长缓存，
+# 部署后用户会在一段时间内拿到「新的 HTML + 旧的 JS/CSS」，
+# 出现布局错乱这类难查的问题（踩过）。
 /css/*
-  Cache-Control: public, max-age=600
+  Cache-Control: public, max-age=60, must-revalidate
 
 /js/*
-  Cache-Control: public, max-age=600
+  Cache-Control: public, max-age=60, must-revalidate
 
 /favicon.svg
   Cache-Control: public, max-age=86400
