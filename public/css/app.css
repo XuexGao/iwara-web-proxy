@@ -1066,24 +1066,36 @@ select.input {
 .watch {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 336px;
+  /* 桌面：左列 播放/详情/评论，右列 作者/相关。
+     五个块是同级元素，手机端靠同一套 areas 换成单列顺序。 */
   grid-template-areas:
-    'main side'
-    'comments side';
-  grid-template-rows: auto 1fr;
+    'head    author'
+    'details related'
+    'comments related';
+  grid-template-rows: auto auto 1fr;
   gap: 26px 26px;
   align-items: start;
 }
 
-.watch__main {
-  grid-area: main;
+.watch__head-block {
+  grid-area: head;
+}
+
+.watch__author {
+  grid-area: author;
+}
+
+.watch__details {
+  grid-area: details;
+  min-width: 0;
 }
 
 .watch__comments {
   grid-area: comments;
 }
 
-.watch__side {
-  grid-area: side;
+.watch__related {
+  grid-area: related;
 }
 
 .player {
@@ -1512,15 +1524,9 @@ select.input {
 /* 左：播放器 + 标题 + 操作 + 简介 + 标签 → 评论
    右：作者（头像/关注/简介） + 相关作品
    具体排布见 .watch 的 grid-template-areas。 */
-.watch__main,
+/* 左列各块都要能收缩，否则长标题会把网格撑破 */
+.watch__head-block,
 .watch__comments {
-  min-width: 0;
-}
-
-.watch__side {
-  display: flex;
-  flex-direction: column;
-  gap: 26px;
   min-width: 0;
 }
 
@@ -1923,6 +1929,35 @@ select.input {
 .stat__k {
   font-size: 12px;
   color: var(--paper-3);
+}
+
+/* ---------------------------------------------------------------- 评论区 */
+
+.comments__list {
+  min-height: 40px;
+}
+
+.comments__form {
+  margin-bottom: 18px;
+}
+
+.comments__form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+/* 评论分页条比列表页的更紧凑，并且居中留白少一点 */
+.comments__pager .pager {
+  padding: 20px 0 0;
+}
+
+.comments__status {
+  text-align: center;
+}
+
+.comments__status .pager__hint {
+  margin-top: 8px;
 }
 
 /* ---------------------------------------------------------------- 作者页简介 */
@@ -2360,27 +2395,16 @@ main.is-loading {
 @media (max-width: 1180px) {
   .watch {
     grid-template-columns: minmax(0, 1fr);
-    /* 单列时把侧栏提到评论前面：手机上一路滑下来，
-       看完简介就该看到作者和相关作品，评论放在最后。 */
+    /* 手机端顺序（按一路往下滑的阅读习惯）：
+       视频 → 标题 → 作者 → 作品详情 → 评论 → 相关作品 */
     grid-template-areas:
-      'main'
-      'side'
-      'comments';
-    grid-template-rows: auto auto auto;
+      'head'
+      'author'
+      'details'
+      'comments'
+      'related';
+    grid-template-rows: auto;
     gap: 20px;
-  }
-  .watch__side {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: 20px;
-  }
-  .watch__author {
-    flex: 1 1 280px;
-  }
-  .watch__related {
-    flex: 1 1 340px;
-    min-width: 0;
   }
 }
 
@@ -2441,17 +2465,11 @@ main.is-loading {
   .rail__thumb {
     width: 120px;
   }
-  .watch__side {
-    flex-direction: column;
-    gap: 18px;
-  }
-  .watch__author,
-  .watch__related {
-    flex: 1 1 auto;
-    width: 100%;
-  }
   .watch__related .rail__thumb {
-    width: 132px;
+    width: 124px;
+  }
+  .watch {
+    gap: 18px;
   }
   main {
     padding-bottom: 72px;

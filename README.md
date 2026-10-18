@@ -28,20 +28,24 @@
 
 <table>
 <tr>
-<td width="50%"><img src="./docs/screenshots/home-dark.webp" alt="作品索引（深色）" /><br /><sub><b>作品索引</b> · 热门、最新、最受喜爱等五种排序</sub></td>
+<td width="50%"><img src="./docs/screenshots/home-dark.webp" alt="作品索引（深色）" /><br /><sub><b>作品索引</b> · 五种排序，每页 30 件</sub></td>
 <td width="50%"><img src="./docs/screenshots/home-light.webp" alt="作品索引（浅色）" /><br /><sub><b>浅色主题</b> · 暖白纸底，可跟随系统</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="./docs/screenshots/watch-dark.webp" alt="播放页" /><br /><sub><b>播放页</b> · 清晰度切换、字幕区、相关作品</sub></td>
+<td width="50%"><img src="./docs/screenshots/watch-dark.webp" alt="播放页" /><br /><sub><b>播放页</b> · 左栏播放与评论，右栏作者与相关作品</sub></td>
 <td width="50%"><img src="./docs/screenshots/watch-light.webp" alt="播放页（浅色）" /><br /><sub><b>播放页（浅色）</b> · 画面区始终保持深色</sub></td>
 </tr>
 <tr>
-<td width="50%"><img src="./docs/screenshots/gallery.webp" alt="图库" /><br /><sub><b>图库</b> · 插画作品，进去可逐张看原图</sub></td>
-<td width="50%"><img src="./docs/screenshots/settings.webp" alt="设置" /><br /><sub><b>设置</b> · 分级、预览、清晰度、配色、Token</sub></td>
+<td width="50%"><img src="./docs/screenshots/mobile-watch.webp" alt="手机播放页" /><br /><sub><b>手机播放页</b> · 视频 → 标题 → 作者 → 说明 → 评论 → 相关</sub></td>
+<td width="50%"><img src="./docs/screenshots/mobile.webp" alt="手机首页" /><br /><sub><b>手机首页</b> · 双列瀑布流，进度条加粗</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="./docs/screenshots/gallery.webp" alt="图库" /><br /><sub><b>图库</b> · 插画与动图，可逐张查看原图</sub></td>
+<td width="50%"><img src="./docs/screenshots/settings.webp" alt="设置" /><br /><sub><b>设置</b> · 分级、悬停预览、清晰度、配色、Token</sub></td>
 </tr>
 <tr>
 <td width="50%"><img src="./docs/screenshots/subscriptions.webp" alt="订阅" /><br /><sub><b>订阅</b> · 只看关注的作者，未登录会说明原因</sub></td>
-<td width="50%"><img src="./docs/screenshots/mobile.webp" alt="移动端" /><br /><sub><b>移动端</b> · 双列瀑布流，进度条加粗</sub></td>
+<td width="50%"></td>
 </tr>
 </table>
 
@@ -57,7 +61,7 @@
 | 图库 | 插画作品列表与多图浏览（键盘 ← → 切换） |
 | 播放列表 · 作者页 | 列表与详情；作者的作品 / 图库 / 粉丝 / 关注，可关注取关 |
 | 论坛 · 帖子 | 只读浏览 |
-| 评论区 | 阅读，登录后可发表 |
+| 评论区 | 阅读与发表（登录后）；条目多时自动分页，每页 20 条 |
 | 搜索 | 视频 / 图库 / 作者 / 论坛 / 帖子，**需登录**（上游接口要求认证） |
 | 订阅 | 只看关注的作者，**需登录**（未登录时上游会静默忽略该条件） |
 | 收藏 · 观看历史 | 收藏需登录；历史存在本机，含续播进度，可逐条删除 |

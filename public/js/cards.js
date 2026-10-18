@@ -172,21 +172,64 @@ function pageWindow(current, totalPages) {
 
 /**
  * 分页条。
+ *
+ * 两种模式：
+ * - 传 `hrefFor`：渲染成 <a>，用于列表页（页码进地址栏，可刷新可分享）
+ * - 传 `onNavigate`：渲染成 <button>，用于评论区这类「就地翻页」，
+ *   避免改地址导致整个播放页（含视频）重新加载
+ *
  * @param {object} options
  * @param {number} options.page 当前页（0 基）
  * @param {number} options.totalPages
- * @param {(page:number) => string} options.hrefFor 生成某页的地址
+ * @param {(page:number) => string} [options.hrefFor]
+ * @param {(page:number) => void} [options.onNavigate]
  * @param {string} [options.noun] 名词，用于无障碍标签
  */
-export function pager({ page, totalPages, hrefFor, noun = '页' }) {
+export function pager({ page, totalPages, hrefFor, onNavigate, noun = '页' }) {
   if (totalPages <= 1) return tpl`<div class="pager"></div>`;
 
   const bar = tpl`<nav class="pager" aria-label="分页"></nav>`;
 
-  const prev = page > 0
-    ? tpl`<a class="pager__btn" href="${hrefFor(page - 1)}" rel="prev" aria-label="上一${noun}">${icon('back')}<span>上一页</span></a>`
-    : tpl`<span class="pager__btn is-off" aria-disabled="true">${icon('back')}<span>上一页</span></span>`;
-  bar.append(prev);
+  /** 生成一个可点的页码/前后页控件。 */
+  function control({ target, label, className, disabled, isCurrent, iconName, iconFirst }) {
+    const glyph = iconName ? icon(iconName) : null;
+    const text = label ? tpl`<span>${label}</span>` : null;
+
+    if (disabled || isCurrent) {
+      const tag = isCurrent ? 'span' : 'span';
+      return tpl`<${raw(tag)} class="${className} ${disabled ? 'is-off' : ''} ${
+        isCurrent ? 'is-on' : ''
+      }"${isCurrent ? raw(' aria-current="page"') : raw(' aria-disabled="true"')}>${
+        iconFirst ? glyph : null
+      }${text}${iconFirst ? null : glyph}</${raw(tag)}>`;
+    }
+
+    if (onNavigate) {
+      const button = tpl`<button class="${className}" type="button">${
+        iconFirst ? glyph : null
+      }${text}${iconFirst ? null : glyph}</button>`;
+      button.addEventListener('click', () => onNavigate(target));
+      return button;
+    }
+
+    return tpl`<a class="${className}" href="${hrefFor(target)}"${
+      className.includes('pager__btn') ? raw(target < page ? ' rel="prev"' : ' rel="next"') : null
+    }>${iconFirst ? glyph : null}${text}${iconFirst ? null : glyph}</a>`;
+  }
+
+  const atStart = page <= 0;
+  const atEnd = page >= totalPages - 1;
+
+  bar.append(
+    control({
+      target: page - 1,
+      label: `上一${noun}`,
+      className: 'pager__btn',
+      disabled: atStart,
+      iconName: 'back',
+      iconFirst: true
+    })
+  );
 
   const numbers = tpl`<div class="pager__nums"></div>`;
   for (const entry of pageWindow(page, totalPages)) {
@@ -194,22 +237,26 @@ export function pager({ page, totalPages, hrefFor, noun = '页' }) {
       numbers.append(tpl`<span class="pager__gap">…</span>`);
       continue;
     }
-    if (entry === page) {
-      numbers.append(
-        tpl`<span class="pager__num is-on" aria-current="page">${entry + 1}</span>`
-      );
-    } else {
-      numbers.append(
-        tpl`<a class="pager__num" href="${hrefFor(entry)}" aria-label="第 ${entry + 1} 页">${entry + 1}</a>`
-      );
-    }
+    numbers.append(
+      control({
+        target: entry,
+        label: String(entry + 1),
+        className: 'pager__num',
+        isCurrent: entry === page
+      })
+    );
   }
   bar.append(numbers);
 
-  const next = page < totalPages - 1
-    ? tpl`<a class="pager__btn" href="${hrefFor(page + 1)}" rel="next" aria-label="下一${noun}"><span>下一页</span>${icon('next')}</a>`
-    : tpl`<span class="pager__btn is-off" aria-disabled="true"><span>下一页</span>${icon('next')}</span>`;
-  bar.append(next);
+  bar.append(
+    control({
+      target: page + 1,
+      label: `下一${noun}`,
+      className: 'pager__btn',
+      disabled: atEnd,
+      iconName: 'next'
+    })
+  );
 
   return bar;
 }

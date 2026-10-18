@@ -23,7 +23,7 @@ import {
   likeVideo,
   postComment
 } from '../api.js';
-import { commentNode, railItem, tagRow, userLink } from '../cards.js';
+import { commentNode, pager, railItem, tagRow, userLink } from '../cards.js';
 import { createPlayer, playback } from '../player.js';
 import { getResume, getSession, getSetting, recordHistory } from '../store.js';
 import { icon, linkifyNode, openModal, stateBlock, toast, toastError, tpl } from '../ui.js';
@@ -365,8 +365,11 @@ async function load(ctx, id, root, holder) {
     </div>`;
   relatedPanel.append(relatedHost);
 
-  const main = tpl`
-    <div class="watch__main">
+  /* 五个同级块：只有同级才能用 grid-template-areas 精确控制两端顺序。
+     桌面：左列 head/details/comments，右列 author/related
+     手机：head → author → details → comments → related */
+  const headBlock = tpl`
+    <div class="watch__head-block">
       ${playerHost}
       <div class="watch__head">
         <h1 class="watch__title">${title}</h1>
@@ -378,21 +381,17 @@ async function load(ctx, id, root, holder) {
         ${copyButton}
         ${refreshButton}
       </div>
+    </div>`;
+
+  const detailsBlock = tpl`
+    <div class="watch__details">
       ${bodyPanel}
       ${tagRow(detail.tags, 14) ? tpl`<div class="watch__tags">${tagRow(detail.tags, 14)}</div>` : null}
     </div>`;
 
-  const side = tpl`
-    <aside class="watch__side">
-      ${authorPanel}
-      ${relatedPanel}
-    </aside>`;
-
-  // 评论单独成块：窄屏时用 order 把它排到侧栏之后，
-  // 桌面仍然是「左栏内容 + 评论 / 右栏作者 + 相关」。
   const commentsBlock = tpl`<div class="watch__comments">${commentPanel}</div>`;
 
-  const layout = tpl`<div class="watch">${main}${commentsBlock}${side}</div>`;
+  const layout = tpl`<div class="watch">${headBlock}${authorPanel}${detailsBlock}${commentsBlock}${relatedPanel}</div>`;
   root.replaceChildren(layout);
 
   /* ---------------- 快捷键以外的收尾 ---------------- */
@@ -514,14 +513,23 @@ function linkifyInto(text) {
  * 评论
  * ------------------------------------------------------------------ */
 
+/**
+ * 评论区：按页加载，就地翻页。
+ *
+ * 不用改地址栏（那会让整个播放页连同视频重新加载），
+ * 而是把分页条做成按钮，翻页后把评论区滚回视野内。
+ */
 function mountComments(container, host, type, id, detail) {
+  const PAGE_SIZE = 20;
+
   let page = 0;
   let loading = false;
-  let done = false;
+  let totalPages = 1;
 
-  const list = tpl`<div></div>`;
-  const footer = tpl`<div class="loadmore"></div>`;
-  host.append(list, footer);
+  const list = tpl`<div class="comments__list"></div>`;
+  const pagerHost = tpl`<div class="comments__pager"></div>`;
+  const status = tpl`<div class="comments__status"></div>`;
+  host.append(list, status, pagerHost);
 
   const session = getSession();
   const canComment = session.authenticated || !!getSetting('token');
@@ -529,7 +537,7 @@ function mountComments(container, host, type, id, detail) {
   if (canComment) {
     const input = tpl`<textarea class="input" rows="3" placeholder="写点什么…" style="height:auto;padding:10px 13px;resize:vertical"></textarea>`;
     const submit = tpl`<button class="btn btn--primary btn--sm" type="button">发表评论</button>`;
-    const box = tpl`<div style="margin-bottom:18px">${input}<div style="display:flex;justify-content:flex-end;margin-top:8px">${submit}</div></div>`;
+    const box = tpl`<div class="comments__form">${input}<div class="comments__form-actions">${submit}</div></div>`;
     submit.addEventListener('click', async () => {
       const body = input.value.trim();
       if (!body) return;
@@ -537,9 +545,11 @@ function mountComments(container, host, type, id, detail) {
       try {
         const created = await postComment(type, id, body);
         const comment = created?.comment || created;
-        if (comment?.id) list.prepend(commentNode(comment));
+        // 新评论总在第一页最前，先回到第 1 页再插入，避免插到别页里
+        if (page === 0 && comment?.id) list.prepend(commentNode(comment));
         input.value = '';
         toast('评论已提交');
+        if (page !== 0) goTo(0);
       } catch (error) {
         toastError(error, '评论提交失败');
       } finally {
@@ -548,46 +558,84 @@ function mountComments(container, host, type, id, detail) {
     });
     container.insertBefore(box, host);
   } else {
-    const hint = tpl`<p class="desc" style="margin-bottom:16px">登录后可以发表评论。</p>`;
-    container.insertBefore(hint, host);
+    container.insertBefore(
+      tpl`<p class="desc" style="margin-bottom:16px">登录后可以发表评论。</p>`,
+      host
+    );
   }
 
-  async function loadMore() {
-    if (loading || done) return;
+  function goTo(target) {
+    const next = Math.max(0, Math.min(target, totalPages - 1));
+    if (next === page && list.childElementCount) return;
+    page = next;
+    load();
+  }
+
+  async function load() {
+    if (loading) return;
     loading = true;
-    footer.replaceChildren(tpl`<div class="skeleton" style="aspect-ratio:auto;height:52px"></div>`);
+    list.replaceChildren(
+      tpl`<div class="skeleton" style="aspect-ratio:auto;height:52px"></div>`,
+      tpl`<div class="skeleton" style="aspect-ratio:auto;height:52px"></div>`
+    );
+    status.replaceChildren();
+    pagerHost.replaceChildren();
+
     try {
-      const data = await fetchComments(type, id, { page, limit: 24 });
+      const data = await fetchComments(type, id, { page, limit: PAGE_SIZE });
       const results = Array.isArray(data?.results) ? data.results : [];
-      footer.replaceChildren();
+      const total = Number(data?.count) || results.length;
+      totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+      list.replaceChildren();
+
       if (!results.length) {
-        done = true;
-        if (page === 0) list.append(tpl`<p class="desc">还没有评论，来说第一句。</p>`);
+        list.append(
+          tpl`<p class="desc">${page > 0 ? '这一页没有评论了。' : '还没有评论，来说第一句。'}</p>`
+        );
+        if (page > 0) {
+          status.append(tpl`<button class="btn btn--sm" type="button">回到第 1 页</button>`);
+          status.querySelector('button').addEventListener('click', () => goTo(0));
+        }
+        loading = false;
         return;
       }
-      for (const comment of results) list.append(commentNode(comment));
-      page += 1;
-      if (results.length < 24) {
-        done = true;
-        return;
+
+      const batch = document.createDocumentFragment();
+      for (const comment of results) batch.append(commentNode(comment));
+      list.append(batch);
+
+      // 只有一页时不显示分页条，避免噪音
+      if (totalPages > 1) {
+        const bar = pager({
+          page,
+          totalPages,
+          onNavigate: (target) => {
+            goTo(target);
+            // 翻页后把评论区头部带回视野，不然用户不知道内容变了
+            container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          },
+          noun: '页'
+        });
+        pagerHost.append(bar);
+        status.append(
+          tpl`<p class="pager__hint">共 ${formatCount(total)} 条评论 · 第 ${page + 1} / ${totalPages} 页</p>`
+        );
       }
-      const more = tpl`<button class="btn btn--sm" type="button">加载更多评论</button>`;
-      more.addEventListener('click', loadMore);
-      footer.append(more);
     } catch (error) {
-      footer.replaceChildren(
+      list.replaceChildren(
         stateBlock({
           title: '评论加载失败',
-          message: error.message,
+          message: error?.message || '稍后再试。',
           error: true,
-          action: { label: '重试', onClick: loadMore }
+          action: { label: '重试', onClick: load }
         })
       );
-      loading = false;
     } finally {
       loading = false;
     }
   }
 
-  loadMore();
+  load();
 }
+
