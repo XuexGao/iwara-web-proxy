@@ -4,7 +4,7 @@
 
 import { avatarUrl } from './api.js';
 import { stopAllPreviews } from './cards-preview.js';
-import { mini, playback } from './player.js';
+import { playback } from './player.js';
 import router from './router.js';
 import {
   bootstrapTheme,
@@ -218,12 +218,12 @@ window.addEventListener('beforeunload', () => {
   bootstrapTheme();
   paintThemeButton();
   renderAccount(getSession());
-  // 两个请求并发：登录能力来自 /api/auth/config，会话来自 /api/auth/me。
-  await Promise.all([loadAuthConfig(), refreshSession()]);
+  // 先拿站点配置（登录是否可用、有没有共享 Token），再取会话。
+  // 两者都改同一个 session 对象，顺序执行最不容易出意外；
+  // 并发虽然现在也安全（合并写入），但没必要留隐患。
+  await loadAuthConfig();
+  await refreshSession();
   await router.start();
-
-  // 迷你播放器状态在刷新后无法恢复，隐藏占位。
-  if (!mini.active) document.getElementById('mini').hidden = true;
 })();
 
 export { playback };

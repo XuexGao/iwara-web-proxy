@@ -1,14 +1,18 @@
 /**
- * 播放页：播放器 + 作品信息 + 作者 + 标签 + 简介 + 评论 + 相关作品。
+ * 播放页，版式参照 B 站：
  *
- * 离开这个页面时，如果视频还在播，会交给迷你播放器继续放；
- * 再回到同一部作品时把那个 <video> 元素接回来，进度和缓冲都不丢。
+ *   左栏：播放器 → 标题 → 数据与操作 → 作品说明 → 标签 → 评论
+ *   右栏：作者（头像 + 关注 + 简介）→ 相关作品
+ *
+ * 离开页面即停止播放（早期版本会把视频交给右下角小窗继续播，
+ * 返回后还能听到声音，已移除）。
  */
 
 import {
   avatarUrl,
   coverUrl,
   fetchComments,
+  fetchProfile,
   fetchRelated,
   fetchVideo,
   followUser,
@@ -20,9 +24,9 @@ import {
   postComment
 } from '../api.js';
 import { commentNode, railItem, tagRow, userLink } from '../cards.js';
-import { createPlayer, mini, playback } from '../player.js';
+import { createPlayer, playback } from '../player.js';
 import { getResume, getSession, getSetting, recordHistory } from '../store.js';
-import { icon, openModal, stateBlock, toast, toastError, tpl } from '../ui.js';
+import { icon, linkifyNode, openModal, stateBlock, toast, toastError, tpl } from '../ui.js';
 
 /* ------------------------------------------------------------------ *
  * 入口
@@ -34,25 +38,9 @@ export async function renderWatch(ctx, { id }) {
 
   ctx.onCleanup(() => {
     holder.disposed = true;
-    const player = holder.player;
-    if (!player) return;
-    const video = player.video;
-    const keepPlaying =
-      video &&
-      !holder.finished &&
-      !video.paused &&
-      !video.ended &&
-      Number.isFinite(video.currentTime) &&
-      video.currentTime > 1;
-
-    if (keepPlaying) {
-      holder.meta.title = holder.meta.title || '正在播放';
-      mini.adopt(player.detachVideo(), holder.meta);
-      player.destroy({ keepVideo: true });
-      return;
-    }
-
-    player.destroy();
+    // 离开播放页就停止播放：之前会把视频交给右下角的小窗继续播，
+    // 返回上一页还能听到声音，体验很糟。这里直接销毁。
+    holder.player?.destroy();
     playback.videoId = null;
     playback.video = null;
     playback.detached = false;
@@ -144,17 +132,13 @@ async function load(ctx, id, root, holder) {
 
   function buildPlayerHost(data) {
     if (ctx.signal.aborted || holder.disposed) return tpl`<div></div>`;
-    const adoptable =
-      playback.detached && playback.videoId === id && playback.video ? mini.release() : null;
-
     player = createPlayer({
       sources: data.sources || [],
       preview: data.preview,
       meta: { id, title, author: authorName },
       poster: coverUrl(detail, 'video'),
-      startAt: adoptable ? 0 : resume,
+      startAt: resume,
       autoplay: getSetting('autoplay'),
-      videoElement: adoptable,
       onEnded: () => {
         holder.finished = true;
         if (!getSetting('autonext')) return;
@@ -310,7 +294,16 @@ async function load(ctx, id, root, holder) {
 
   (async () => {
     try {
-      const data = await fetchRelated(id, { limit: 12 });
+      // 相关作品不是首屏关键路径，允许它慢一点：
+      // 上游偶发超时不该让「相关作品」直接显示成加载失败。
+      let data = null;
+      for (let attempt = 0; attempt < 2 && !data; attempt += 1) {
+        try {
+          data = await fetchRelated(id, { limit: 12 });
+        } catch (error) {
+          if (attempt === 1) throw error;
+        }
+      }
       const results = Array.isArray(data?.results) ? data.results : [];
       relatedItems.push(...results);
       if (!results.length) {
@@ -336,10 +329,44 @@ async function load(ctx, id, root, holder) {
   commentPanel.append(commentsHost);
   mountComments(commentPanel, commentsHost, 'video', id, detail);
 
-  /* ---------------- 组装 ---------------- */
+  /* ---------------- 组装 ----------------
+     版式参照 B 站：
+       左栏：播放器 → 标题 → 数据与操作 → 简介 → 标签 → 评论
+       右栏：作者（头像 + 关注 + 简介）→ 相关作品
+     作者信息从主栏移到侧栏，主栏就只剩"看视频"和"看评论"两件事。 */
+
+  const authorPanel = tpl`<div class="watch__author"></div>`;
+  authorPanel.append(authorBar);
+
+  // 作者简介放进右栏，跟着作者一起，而不是和作品说明混在主栏里
+  (async () => {
+    const handle = detail.user?.username;
+    if (!handle) return;
+    try {
+      const profile = await fetchProfile(handle);
+      const text = String(profile?.body || '').trim();
+      if (!text || ctx.signal.aborted) return;
+      const box = tpl`
+        <div class="watch__authorbio">
+          <div class="watch__authorbio-title">作者简介</div>
+          <div class="desc is-clamped"></div>
+        </div>`;
+      box.querySelector('.desc').append(linkifyNode(text));
+      box.addEventListener('click', () => box.querySelector('.desc').classList.toggle('is-clamped'));
+      authorPanel.append(box);
+    } catch {
+      /* 拿不到简介不影响播放 */
+    }
+  })();
+
+  const relatedPanel = tpl`
+    <div class="watch__related">
+      <div class="watch__related-title">相关作品</div>
+    </div>`;
+  relatedPanel.append(relatedHost);
 
   const main = tpl`
-    <div>
+    <div class="watch__main">
       ${playerHost}
       <div class="watch__head">
         <h1 class="watch__title">${title}</h1>
@@ -351,21 +378,21 @@ async function load(ctx, id, root, holder) {
         ${copyButton}
         ${refreshButton}
       </div>
-      ${authorBar}
-      ${tagRow(detail.tags, 14) ? tpl`<div class="panel">${tagRow(detail.tags, 14)}</div>` : null}
       ${bodyPanel}
-      ${commentPanel}
+      ${tagRow(detail.tags, 14) ? tpl`<div class="watch__tags">${tagRow(detail.tags, 14)}</div>` : null}
     </div>`;
 
   const side = tpl`
-    <div class="watch__side">
-      <div class="panel">
-        <div class="panel__title">相关作品</div>
-      </div>
-    </div>`;
-  side.querySelector('.panel').append(relatedHost);
+    <aside class="watch__side">
+      ${authorPanel}
+      ${relatedPanel}
+    </aside>`;
 
-  const layout = tpl`<div class="watch">${main}${side}</div>`;
+  // 评论单独成块：窄屏时用 order 把它排到侧栏之后，
+  // 桌面仍然是「左栏内容 + 评论 / 右栏作者 + 相关」。
+  const commentsBlock = tpl`<div class="watch__comments">${commentPanel}</div>`;
+
+  const layout = tpl`<div class="watch">${main}${commentsBlock}${side}</div>`;
   root.replaceChildren(layout);
 
   /* ---------------- 快捷键以外的收尾 ---------------- */

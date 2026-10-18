@@ -55,7 +55,7 @@ public/
     api.js           接口客户端、媒体地址构造、格式化
     cards.js         卡片、信息流、评论、标签行
     cards-preview.js 悬停预览
-    player.js        播放器、手势、迷你播放器
+    player.js        播放器与手势（无小窗：离开即停止）
     theme-init.js    首帧前定配色（必须独立文件，CSP 禁内联脚本）
     views/           各页面视图
 test/              后端 / 路由 / 密码 测试
@@ -196,6 +196,42 @@ following: { id, createdAt, user:     { name, username, avatar, ... } }
 直接渲染外层会得到一堆「匿名」。前端用 `item.follower || item.user || item` 取。
 （Iwara 客户端显示正常，是因为它取的就是内层。）
 
+### 搜索
+
+搜索页（`views/search.js`）有三处必须注意：
+
+1. **`type` 必须是复数**：`videos` / `images` / `users` / `posts`。
+   传单数不会报参数错误，而是 500，很容易被误判成鉴权或上游故障。
+   地址栏保留旧的单数写法做兼容（`TYPE_ALIASES`）。
+2. **`unwrap()` 不能顺手写 `item.user`**：作品对象自己就有 `user`（作者），
+   那样会把整个作品替换成作者，标题全变「无标题」。
+3. `canSearch` 要把服务端共享 Token 算进去（`session.sharedToken`），
+   否则配了 `IWARA_AUTHORIZATION` 前端仍显示「需要登录」。
+
+Wrangler 部署注意：`IWARA_AUTHORIZATION` 用 `wrangler secret put` 配置，
+**不能**同时写进 `wrangler.jsonc` 的 `vars`（同名会报 `Binding name already in use`）。
+
+### 播放页版式（B 站式两栏）
+
+`.watch` 用 grid-template-areas 排三块：`main` / `comments` 在左列，`side` 跨右列。
+
+```
+桌面          移动（≤1180px）
+┌────────┬──────┐   ┌────────┐
+│ main   │ side │   │ main   │
+├────────┤      │   ├────────┤
+│comments│      │   │ side   │
+└────────┴──────┘   ├────────┤
+                    │comments│
+                    └────────┘
+```
+
+- 左栏：播放器 → 标题 → 数据 → 操作 → 作品说明 → 标签；评论单独成块。
+- 右栏：作者卡（头像 + 关注 + 简介）→ 相关作品。
+- **手机端作者卡必须排在评论之前**（一路往下滑的阅读顺序），
+  所以评论要单独成块并用 grid area 控制顺序，不能塞在主栏内部——
+  否则单列时它会被作者卡挤到最下面，看起来像「作者的评论区在下面」。
+
 ### 分页
 
 列表统一用 `renderPagedFeed()`（`cards.js`），**不是无限滚动**：
@@ -208,6 +244,9 @@ following: { id, createdAt, user:     { name, username, avatar, ... } }
   否则点了翻页之后界面纹丝不动，看起来像没反应。
 - 首屏骨架屏**必须放进 `.grid` 内部**：放进 `.loadmore`（`place-items:center`）
   会被压成单列。
+- `renderPagedFeed` 是**同步返回**的：先交出带骨架的节点，数据回来再填充。
+  一旦改回 async 并在内部 await 接口，骨架就永远不显示（调用方 await 到的是
+  已经填好的节点），表现为「骨架屏消失了」。
 
 ### 样式
 
@@ -223,7 +262,7 @@ following: { id, createdAt, user:     { name, username, avatar, ... } }
 | `--tint-*` | 徽章底色 |
 | `--surface-sunken` / `--scrim` | 顶栏毛玻璃 / 弹窗遮罩 |
 
-播放器与迷你播放器**强制深色**（`color-scheme: dark`）：它们盖在视频画面上，
+播放器**强制深色**（`color-scheme: dark`）：它盖在视频画面上，
 浅色主题下变成白底会干扰观看。
 
 ---
@@ -240,8 +279,9 @@ npm run test:page      # 17 项分页（每页 30、翻页回顶、刷新保持�
 npm run test:download  # 12 项下载文件名（含 RFC 5987 中文编码）
 npm run test:linkify   # 13 项 linkify（防 [object Object] 回归）
 npm run test:theme     # 7 项主题持久化与首帧无闪烁
-npm run test:ui        # 播放器、悬停预览、迷你播放器
+npm run test:ui        # 播放器、悬停预览、离开即停止
 npm run check          # import 具名导出一致性
+npm run test:search    # 12 项搜索（复数 type / unwrap / 共享 Token）
 npm run shots          # 重新生成 README 截图（输出到 docs/screenshots/）
 ```
 
@@ -287,6 +327,11 @@ SITE_PASSWORD='@Gao123456' node dev-server.mjs
 9. **`linkify()` 返回的是 raw 包装，不是节点。** 直接 `append(linkify(...))`
    会渲染成 `[object Object]`（论坛回复就这么坏过）。要节点请用 `linkifyNode()`。
 10. **骨架屏别放进 `.loadmore`。** 那里的 `place-items:center` 会把网格压成单列。
+11. **改了 CSS/JS 一定要重新部署并核对线上文件。** 出现过「JS 结构已更新、
+    CSS 没部署」，页面塌成一列。核对时注意：未过站点密码时请求静态资源会拿到
+    401 登录页，直接 grep 会误判成「没部署」——要带上 Cookie。
+12. **一次性 DOM 的块不要塞进另一个块里再用 CSS 排序。** 播放页的评论必须与
+    `main` / `side` 同级，才能用 grid area 把它排到手机端的最后。
 
 ---
 
@@ -302,13 +347,18 @@ SITE_PASSWORD='@Gao123456' node dev-server.mjs
 /profile/{username}   /user/{id}/followers   /user/{id}/following
 /playlists      /playlist/{id}
 /forum/threads  /forum/{cat}/{threadId}      /posts   /post/{id}
-/search?query&type      # ⚠️ 需要有效 token，否则固定 500
+/search?query&type      # ⚠️ type 必须是复数，且需要有效 token
 ```
 
 其他要点：
 
 - `x-site: www.iwara.tv` 决定拿主站还是 AI 站内容。
-- `/search` 未登录固定返回 `errors.serverError`（500），不是本站故障。
+- **`/search` 的 `type` 必须是复数**：`videos` / `images` / `users` / `posts`。
+  传单数（`video`、`image`…）不会提示参数错误，而是直接返回
+  `500 {"message":"errors.serverError"}` —— 这正是搜索「用不了」的真正原因，
+  很容易被误判成鉴权或上游故障。
+- `/search` 还需要有效 token；未登录时同样返回 500。
+- `type=forum` 目前上游固定 500（服务端故障），前端已单独提示。
 - `subscribed=true` **未登录时被上游静默忽略**，会返回全站内容且不报错——
   所以订阅页把登录作为硬前置条件。
 - Iwara 没有服务端观看历史接口，历史只能是本地的。

@@ -1066,8 +1066,24 @@ select.input {
 .watch {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 336px;
-  gap: 26px;
+  grid-template-areas:
+    'main side'
+    'comments side';
+  grid-template-rows: auto 1fr;
+  gap: 26px 26px;
   align-items: start;
+}
+
+.watch__main {
+  grid-area: main;
+}
+
+.watch__comments {
+  grid-area: comments;
+}
+
+.watch__side {
+  grid-area: side;
 }
 
 .player {
@@ -1491,111 +1507,79 @@ select.input {
   }
 }
 
-/* ---------------------------------------------------------------- 迷你播放器 */
+/* ---------------------------------------------------------------- 播放页（B 站式两栏） */
 
-/* 播放器与迷你播放器内部强制深色，与主题解耦。 */
-.player,
-.mini {
-  /* 强制深色上下文：里面的文字/图标一律用浅色，
-     否则浅色主题下会把 --paper 变成近黑，压在视频画面上直接看不见。 */
-  color: #f4f0f8;
-  color-scheme: dark;
-}
-
-.mini {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 70;
-  width: 336px;
-  background: var(--ink-1);
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  box-shadow: var(--shadow);
-  overflow: hidden;
-  animation: miniIn 0.24s var(--ease);
-}
-
-@keyframes miniIn {
-  from {
-    opacity: 0;
-    transform: translateY(14px) scale(0.97);
-  }
-}
-
-.mini video {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  background: #000;
-  object-fit: contain;
-}
-
-.mini__bar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px 10px;
-  align-items: center;
-  padding: 9px 10px 10px;
-}
-
-.mini__meta {
+/* 左：播放器 + 标题 + 操作 + 简介 + 标签 → 评论
+   右：作者（头像/关注/简介） + 相关作品
+   具体排布见 .watch 的 grid-template-areas。 */
+.watch__main,
+.watch__comments {
   min-width: 0;
 }
 
-.mini__title {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13.5px;
-  font-weight: 500;
-}
-
-.mini__title:hover {
-  color: var(--rose);
-}
-
-.mini__author {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--paper-3);
-}
-
-.mini__actions {
+.watch__side {
   display: flex;
-  gap: 2px;
+  flex-direction: column;
+  gap: 26px;
+  min-width: 0;
 }
 
-.mini__actions button {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  background: none;
+.watch__author {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--ink-1);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r);
+}
+
+/* 侧栏里的作者横条不需要上下边框，卡片本身已经是容器 */
+.watch__author .authorbar {
+  padding: 0;
   border: 0;
-  border-radius: 50%;
-  color: var(--paper-2);
+}
+
+.watch__authorbio {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 12px;
   cursor: pointer;
 }
 
-.mini__actions button:hover {
-  background: var(--ink-3);
+.watch__authorbio-title {
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--paper-3);
+}
+
+.watch__authorbio .desc {
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.watch__related {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.watch__related-title {
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 500;
   color: var(--paper);
 }
 
-.mini__progress {
-  grid-column: 1 / -1;
-  height: 3px;
-  background: var(--ink-3);
-  border-radius: 2px;
-  overflow: hidden;
+/* 侧栏条目的缩略图略窄，给标题更多空间 */
+.watch__related .rail__thumb {
+  width: 132px;
 }
 
-.mini__progress i {
-  display: block;
-  width: 0;
-  height: 100%;
-  background: var(--rose);
+.watch__tags {
+  margin-top: 20px;
 }
 
 /* ---------------------------------------------------------------- 作品详情 */
@@ -1939,6 +1923,36 @@ select.input {
 .stat__k {
   font-size: 12px;
   color: var(--paper-3);
+}
+
+/* ---------------------------------------------------------------- 作者页简介 */
+
+.profile__bio {
+  margin: 18px 0 22px;
+  padding: 14px 16px;
+  background: var(--ink-1);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r);
+  cursor: pointer;
+}
+
+.profile__bio-title {
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--paper-3);
+}
+
+.profile__bio .desc {
+  font-size: 13.5px;
+  line-height: 1.75;
+}
+
+/* 作品列表与上方的标签栏之间留出呼吸，别让首行封面贴着排序条 */
+.profile__content {
+  margin-top: 22px;
 }
 
 /* ---------------------------------------------------------------- 列表 / 论坛 */
@@ -2340,14 +2354,33 @@ main.is-loading {
 
 /* ---------------------------------------------------------------- 自适应 */
 
+/* 窄屏：两栏变单栏。顺序保持「播放器 → 作者 → 相关 → 评论」不现实，
+   因为 DOM 里评论在主栏内，所以这里只让侧栏整体落到主栏之后，
+   并把作者卡与相关作品并排，避免占满一屏。 */
 @media (max-width: 1180px) {
   .watch {
     grid-template-columns: minmax(0, 1fr);
+    /* 单列时把侧栏提到评论前面：手机上一路滑下来，
+       看完简介就该看到作者和相关作品，评论放在最后。 */
+    grid-template-areas:
+      'main'
+      'side'
+      'comments';
+    grid-template-rows: auto auto auto;
+    gap: 20px;
   }
   .watch__side {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 0 20px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 20px;
+  }
+  .watch__author {
+    flex: 1 1 280px;
+  }
+  .watch__related {
+    flex: 1 1 340px;
+    min-width: 0;
   }
 }
 
@@ -2408,14 +2441,20 @@ main.is-loading {
   .rail__thumb {
     width: 120px;
   }
-  .mini {
-    right: 10px;
-    left: 10px;
-    bottom: 10px;
-    width: auto;
+  .watch__side {
+    flex-direction: column;
+    gap: 18px;
+  }
+  .watch__author,
+  .watch__related {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+  .watch__related .rail__thumb {
+    width: 132px;
   }
   main {
-    padding-bottom: 130px;
+    padding-bottom: 72px;
   }
   .panel {
     margin-top: 26px;

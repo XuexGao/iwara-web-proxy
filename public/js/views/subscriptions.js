@@ -91,7 +91,7 @@ export async function renderSubscriptions(ctx) {
 
   const page = pageFromQuery(ctx.query);
 
-  const feed = await renderPagedFeed({
+  const feed = renderPagedFeed({
     page,
     kind: kind === 'images' ? 'image' : 'video',
     hrefFor: (target) =>
@@ -111,11 +111,5 @@ export async function renderSubscriptions(ctx) {
     }
   });
 
-  const footer = tpl`
-    <p class="desc" style="margin-top:24px">
-      想调整关注列表？在作品页点作者名进入主页，那里有关注按钮。
-      <a href="#/" style="color:var(--celadon)">回首页看看</a>
-    </p>`;
-
-  return tpl`<div>${head}${kindChips}${sortChips}<div style="margin-top:18px">${feed}</div>${footer}</div>`;
+  return tpl`<div>${head}${kindChips}${sortChips}<div style="margin-top:18px">${feed}</div></div>`;
 }

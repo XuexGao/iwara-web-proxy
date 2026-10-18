@@ -15,7 +15,8 @@ import {
   formatCount,
   formatDate,
   galleryImageUrl,
-  imageUrl,
+  galleryStillUrl,
+  isVideoFile,
   playlistCoverUrl,
   postComment
 } from '../api.js';
@@ -61,7 +62,7 @@ export async function renderImages(ctx) {
     );
   }
 
-  const feed = await renderPagedFeed({
+  const feed = renderPagedFeed({
     page,
     kind: 'image',
     hrefFor: (target) => `#/images?sort=${sort}&page=${target + 1}`,
@@ -119,18 +120,33 @@ export async function renderGallery(ctx, { id }) {
       counter.textContent = '0 / 0';
       return;
     }
-    const image = document.createElement('img');
-    image.alt = `${title} 第 ${index + 1} 张`;
-    image.loading = 'eager';
-    // 先把 <img> 挂进文档再设 src：Firefox 里对一个尚未插入文档、
+    // 图库里可能混着动图（Iwara 存成 .webm）。用 <img> 渲染视频必然失败，
+    // 所以要按类型分别用 <img> / <video>。
+    const media = isVideoFile(file) ? document.createElement('video') : document.createElement('img');
+
+    if (media instanceof HTMLVideoElement) {
+      media.src = galleryImageUrl(file);
+      media.controls = true;
+      media.autoplay = true;
+      media.loop = true;
+      media.muted = true;
+      media.playsInline = true;
+      media.preload = 'metadata';
+    } else {
+      media.alt = `${title} 第 ${index + 1} 张`;
+      media.loading = 'eager';
+    }
+
+    // 先把元素挂进文档再设 src：Firefox 里对一个尚未插入文档、
     // 又被 replaceChildren 立刻换掉的元素设 src，请求会被中断并抛 error，
-    // 表现为"图源不可用"——这正是排查这个 bug 时踩到的问题。
-    stage.replaceChildren(image);
-    image.src = galleryImageUrl(file);
-    image.addEventListener('error', () => {
+    // 表现为「图源不可用」——这正是排查这个 bug 时踩到的问题。
+    stage.replaceChildren(media);
+    if (media instanceof HTMLImageElement) media.src = galleryImageUrl(file);
+
+    media.addEventListener('error', () => {
       stage.replaceChildren(
         stateBlock({
-          title: '这张图加载失败',
+          title: isVideoFile(file) ? '这段动图加载失败' : '这张图加载失败',
           message: '图源可能暂时不可用，翻到下一张试试。',
           error: true
         })
@@ -144,7 +160,7 @@ export async function renderGallery(ctx, { id }) {
 
   const thumbs = tpl`<div class="thumbs"></div>`;
   files.forEach((file, i) => {
-    const button = tpl`<button type="button" aria-label="第 ${i + 1} 张"><img src="${imageUrl(file, 'thumbnail')}" alt="" loading="lazy" /></button>`;
+    const button = tpl`<button type="button" aria-label="第 ${i + 1} 张"><img src="${galleryStillUrl(file)}" alt="" loading="lazy" /></button>`;
     button.addEventListener('click', () => {
       index = i;
       paint();
@@ -329,7 +345,7 @@ export async function renderPlaylists(ctx) {
     desc: '作者自己整理的合集，通常围绕一个系列或一个题材。'
   });
 
-  const feed = await renderPagedFeed({
+  const feed = renderPagedFeed({
     page,
     hrefFor: (target) => `#/playlists?page=${target + 1}`,
     render: (item) => playlistCard(item),
@@ -366,7 +382,7 @@ export async function renderPlaylist(ctx, { id }) {
       </div>
     </div>`;
 
-  const feed = await renderPagedFeed({
+  const feed = renderPagedFeed({
     page,
     hrefFor: (target) => `#/playlist/${id}?page=${target + 1}`,
     render: (item) => workCard(item, item.numImages !== undefined && !item.file ? 'image' : 'video'),

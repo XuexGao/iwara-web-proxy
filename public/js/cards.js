@@ -221,6 +221,12 @@ export function pager({ page, totalPages, hrefFor, noun = '页' }) {
 /**
  * 渲染一页内容并给出分页条。
  *
+ * ⚠️ 这个函数是**同步**返回的，数据在后台加载。
+ *
+ * 之前它是 async 且内部 await 了接口，于是调用方 `await renderPagedFeed(...)`
+ * 拿到的是「已经填好内容」的节点——骨架屏虽然建出来了，却从来没被插进页面，
+ * 表现为「骨架屏彻底不见了」。现在先把带骨架的节点交出去，数据回来再填充。
+ *
  * @param {object} options
  * @param {(page:number, limit:number) => Promise<{results:any[], count:number, limit?:number}>} options.fetchPage
  * @param {number} [options.page] 当前页（0 基）
@@ -231,9 +237,9 @@ export function pager({ page, totalPages, hrefFor, noun = '页' }) {
  * @param {string} [options.emptyTitle]
  * @param {string} [options.emptyMessage]
  * @param {number} [options.limit]
- * @returns {Promise<Node>}
+ * @returns {HTMLElement} 立刻可用的节点（内含骨架屏）
  */
-export async function renderPagedFeed(options) {
+export function renderPagedFeed(options) {
   const {
     fetchPage,
     page = 0,
@@ -251,71 +257,87 @@ export async function renderPagedFeed(options) {
   const tail = tpl`<div class="loadmore"></div>`;
   root.append(grid, tail);
 
-  // 先把骨架铺满，避免翻页时整片空白闪一下
-  for (let i = 0; i < Math.min(limit, 12); i += 1) {
-    grid.append(
-      tpl`<div class="card card--skeleton">
-        <div class="skeleton"></div>
-        <div class="skeleton" style="aspect-ratio:auto;height:14px;width:82%"></div>
-        <div class="skeleton" style="aspect-ratio:auto;height:11px;width:46%"></div>
-      </div>`
-    );
-  }
+  // 骨架数量按每页条数来，但不超过 12 个，避免一次铺太多节点。
+  const skeletonCount = Math.min(limit, 12);
 
-  let data;
-  try {
-    data = await fetchPage(page, limit);
-  } catch (error) {
+  function showSkeleton() {
     grid.replaceChildren();
-    tail.replaceChildren(
-      stateBlock({
-        title: '加载失败',
-        message: error?.message || '请稍后重试。',
-        error: true,
-        action: { label: '重试', onClick: () => location.reload() }
-      })
-    );
-    return root;
+    for (let i = 0; i < skeletonCount; i += 1) {
+      grid.append(
+        tpl`<div class="card card--skeleton" aria-hidden="true">
+          <div class="skeleton"></div>
+          <div class="skeleton" style="aspect-ratio:auto;height:14px;width:82%"></div>
+          <div class="skeleton" style="aspect-ratio:auto;height:11px;width:46%"></div>
+        </div>`
+      );
+    }
   }
 
-  const results = Array.isArray(data?.results) ? data.results : [];
-  const total = Number(data?.count) || 0;
-  const effectiveLimit = Number(data?.limit) > 0 ? Number(data.limit) : limit;
-  const totalPages = Math.max(1, Math.ceil(total / effectiveLimit));
+  showSkeleton();
 
-  grid.replaceChildren();
-  tail.replaceChildren();
+  (async () => {
+    let data;
+    try {
+      data = await fetchPage(page, limit);
+    } catch (error) {
+      grid.replaceChildren();
+      tail.replaceChildren(
+        stateBlock({
+          title: '加载失败',
+          message: error?.message || '请稍后重试。',
+          error: true,
+          action: { label: '重试', onClick: () => location.reload() }
+        })
+      );
+      return;
+    }
 
-  if (!results.length) {
-    grid.append(
-      stateBlock({
-        title: page > 0 ? '这一页是空的' : emptyTitle,
-        message: page > 0 ? '这已经是最后一页附近了，回上一页看看。' : emptyMessage,
-        action:
-          page > 0
-            ? { label: '回上一页', onClick: () => (location.hash = hrefFor(page - 1).replace(/^#/, '')) }
-            : undefined
-      })
-    );
-    root.append(pager({ page, totalPages, hrefFor }));
-    return root;
-  }
+    // 节点可能已被导航丢弃
+    if (!root.isConnected && root.parentNode === null && tail.childElementCount === 0) {
+      /* 首次加载时 root 尚未挂载是正常的，不能据此丢弃 */
+    }
 
-  const renderItem = render || ((item) => workCard(item, kind));
-  const batch = document.createDocumentFragment();
-  for (const item of results) batch.append(renderItem(item));
-  grid.append(batch);
+    const results = Array.isArray(data?.results) ? data.results : [];
+    const total = Number(data?.count) || 0;
+    const effectiveLimit = Number(data?.limit) > 0 ? Number(data.limit) : limit;
+    const totalPages = Math.max(1, Math.ceil(total / effectiveLimit));
 
-  tail.append(pager({ page, totalPages, hrefFor }));
+    grid.replaceChildren();
+    tail.replaceChildren();
 
-  // 分页信息：第 N 页 / 共 M 页，以及这一页的数字范围
-  if (total > effectiveLimit) {
-    const from = page * effectiveLimit + 1;
-    const to = Math.min(total, page * effectiveLimit + results.length);
-    tail.append(
-      tpl`<p class="pager__hint">第 ${from}–${to} 件，共 ${formatCount(total)} 件 · 第 ${page + 1} / ${totalPages} 页</p>`
-    );
-  }
+    if (!results.length) {
+      grid.append(
+        stateBlock({
+          title: page > 0 ? '这一页是空的' : emptyTitle,
+          message: page > 0 ? '这已经是最后一页附近了，回上一页看看。' : emptyMessage,
+          action:
+            page > 0
+              ? {
+                  label: '回上一页',
+                  onClick: () => (location.hash = hrefFor(page - 1).replace(/^#/, ''))
+                }
+              : undefined
+        })
+      );
+      tail.append(pager({ page, totalPages, hrefFor }));
+      return;
+    }
+
+    const renderItem = render || ((item) => workCard(item, kind));
+    const batch = document.createDocumentFragment();
+    for (const item of results) batch.append(renderItem(item));
+    grid.append(batch);
+
+    tail.append(pager({ page, totalPages, hrefFor }));
+
+    if (total > effectiveLimit) {
+      const from = page * effectiveLimit + 1;
+      const to = Math.min(total, page * effectiveLimit + results.length);
+      tail.append(
+        tpl`<p class="pager__hint">第 ${from}–${to} 件，共 ${formatCount(total)} 件 · 第 ${page + 1} / ${totalPages} 页</p>`
+      );
+    }
+  })();
 
   return root;
 }

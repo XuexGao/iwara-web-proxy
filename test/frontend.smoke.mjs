@@ -50,6 +50,18 @@ async function waitFor(fn, { timeout = 30000, interval = 700, label = '' } = {})
 
 const count = (page, selector) => page.locator(selector).count();
 
+const PASSWORD = process.env.SITE_PASSWORD || '@Gao123456';
+
+/** 站点开了访问密码时先过一遍，否则测到的是登录页。 */
+async function passGate(page, base) {
+  await page.goto(`${base}/`, { waitUntil: 'commit', timeout: 60000 });
+  if ((await page.locator('#pw').count()) === 0) return false;
+  await page.locator('#pw').fill(PASSWORD);
+  await page.locator('#go').click();
+  await new Promise((r) => setTimeout(r, 5000));
+  return true;
+}
+
 const browser = await firefox.launch({ executablePath: EXECUTABLE, headless: !HEADFUL });
 const context = await browser.newContext({
   viewport: { width: 1440, height: 940 },
@@ -73,9 +85,12 @@ page.on('requestfailed', (request) => {
 /* ---------------- 首页 ---------------- */
 
 console.log('\n[1] 首页');
+await passGate(page, BASE);
 await page.goto(`${BASE}/`, { waitUntil: 'commit', timeout: 60000 });
 
-await waitFor(async () => (await count(page, '.card')) > 0, { label: '作品卡片' });
+// 骨架屏也是 .card，必须等它被替换掉，否则会数到占位块
+await waitFor(async () => (await count(page, '.card--skeleton')) === 0, { label: '骨架屏消失' });
+await waitFor(async () => (await count(page, '.card')) >= 20, { label: '作品卡片' });
 const cardCount = await count(page, '.card');
 check('作品卡片已渲染', cardCount > 0, `找到 ${cardCount} 张`);
 check('索引标题存在', (await count(page, '.lede__title')) > 0);
@@ -183,58 +198,59 @@ if (playable) {
 
 await page.screenshot({ path: `${SHOTS}/watch.png`, fullPage: false });
 
-/* ---------------- 迷你播放器 ---------------- */
+/* ---------------- 离开播放页即停止 ---------------- */
 
-console.log('\n[4] 迷你播放器接力');
+console.log('\n[4] 离开播放页应停止播放');
 const wasPlaying = await page
   .locator('.player__stage video')
   .first()
   .evaluate((v) => !v.paused && v.readyState >= 2)
   .catch(() => false);
 
-await page.locator('#topnav a[data-nav="tags"]').click();
-await waitFor(async () => (await count(page, '.tagchip')) > 0, { timeout: 45000, label: '标签页' });
-console.log('  ✓ 切换到标签页成功');
+await page.goto(`${BASE}/#/images`, { waitUntil: 'commit' });
+await waitFor(async () => (await count(page, '.card')) > 0, { timeout: 45000, label: '图库页' });
+
+const afterLeave = await page.evaluate(() => ({
+  videos: document.querySelectorAll('video').length,
+  playing: [...document.querySelectorAll('video')].filter((v) => !v.paused && v.currentTime > 0).length,
+  hasMini: !!document.querySelector('.mini')
+}));
+
+// 小窗已移除；离开播放页后不该还有视频在后台出声
+check('页面上没有小窗元素', !afterLeave.hasMini, JSON.stringify(afterLeave));
+check('离开后没有残留的播放器在播', afterLeave.playing === 0, JSON.stringify(afterLeave));
 
 if (wasPlaying) {
-  const miniVisible = await waitFor(async () => (await count(page, '#mini:not([hidden])')) > 0, {
-    timeout: 12000,
-    label: '迷你播放器'
-  });
-  check('切页面后视频交给迷你播放器继续播', !!miniVisible);
-  if (miniVisible) {
-    check(
-      '迷你播放器里的视频仍在播放',
-      await page
-        .locator('#mini video')
-        .first()
-        .evaluate((v) => !v.paused || v.currentTime > 0)
-        .catch(() => false)
-    );
-    await page.screenshot({ path: `${SHOTS}/mini-player.png`, fullPage: false });
-  }
-} else {
-  console.log('  · 视频未进入播放状态，跳过迷你播放器断言（本地慢速传输属正常）');
+  console.log('  · 离开前视频在播放，已确认离开后停止');
 }
 
-/* ---------------- 标签页 ---------------- */
+/* ---------------- 标签页 ---------------- *//* ---------------- 标签页 ---------------- */
 
-console.log('\n[5] 标签索引');
-const tagCount = await waitFor(
+console.log('\n[5] 单一标签页');
+// 顶栏已无「标签索引」，改从作品页的标签点进来
+await page.goto(`${BASE}/#/video/8h9advbso9KH3A`, { waitUntil: 'commit' });
+const tagHref = await waitFor(
   async () => {
-    const n = await count(page, '.tagchip');
-    return n > 0 ? n : null;
+    const href = await page.locator('a.tagchip').first().getAttribute('href').catch(() => null);
+    return href || false;
   },
-  { timeout: 40000, label: '标签 chips' }
+  { timeout: 45000, label: '标签链接' }
 );
-check('标签墙已渲染', tagCount > 0, `找到 ${tagCount || 0} 个标签`);
-await page.screenshot({ path: `${SHOTS}/tags.png`, fullPage: false });
+if (tagHref && typeof tagHref === 'string') {
+  await page.goto(`${BASE}/${tagHref}`, { waitUntil: 'commit' });
+  await waitFor(async () => (await count(page, '.card')) > 0, { timeout: 45000, label: '标签作品' });
+  check('标签作品页有内容', (await count(page, '.card')) > 0);
+} else {
+  check('标签作品页有内容', false, '没取到标签链接');
+}
+await page.screenshot({ path: `${SHOTS}/tag.png`, fullPage: false });
 
 /* ---------------- 其它页面 ---------------- */
 
 console.log('\n[6] 其余页面');
 const pages = [
   ['图库', '/#/images', '.card', 45000],
+  ['我的关注', '/#/library/following', '.state__title, .person, .grid', 30000],
   ['论坛', '/#/forum', '.rowitem', 45000],
   ['播放列表', '/#/playlists', '.card', 45000],
   ['设置', '/#/settings', '.switch', 15000],

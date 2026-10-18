@@ -181,7 +181,7 @@ function favoritesView(ctx) {
       return;
     }
 
-    const feed = await renderPagedFeed({
+    const feed = renderPagedFeed({
       page: pageFromQuery(ctx.query),
       kind: media.type,
       hrefFor: (target) => `#/library/favorites?kind=${media.id}&page=${target + 1}`,

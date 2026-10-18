@@ -241,15 +241,20 @@ async function authRequest(path, init) {
 export async function refreshSession() {
   try {
     const data = await authRequest('/api/auth/me');
+    // ⚠️ 必须用展开合并，不能整个重建对象：
+    // sharedToken / gateRequired 来自另一个接口（/api/auth/config 与 /api/gate/status），
+    // 而这三个请求是并发发出的。整体重建会把先到的那份配置抹掉，
+    // 结果就是「服务端明明配了共享 Token，前端还显示要登录」——搜索页因此打不开。
     session = {
+      ...session,
       ready: true,
       authenticated: !!data.authenticated,
       user: data.user || null,
-      loginEnabled: !!data.loginEnabled,
+      loginEnabled: !!data.loginEnabled || session.loginEnabled,
       tokenKind: data.tokenKind
     };
   } catch {
-    session = { ready: true, authenticated: false, user: null, loginEnabled: session.loginEnabled };
+    session = { ...session, ready: true, authenticated: false, user: null };
   }
   emitSession();
   return session;

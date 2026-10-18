@@ -76,7 +76,7 @@ export async function renderForum(ctx) {
 
   const page = pageFromQuery(ctx.query);
 
-  const feed = await renderPagedFeed({
+  const feed = renderPagedFeed({
     page,
     columns: 'rowlist',
     render: (thread) => threadNode(thread),
@@ -86,12 +86,7 @@ export async function renderForum(ctx) {
     fetchPage: (target, limit) => fetchForumThreads({ page: target, limit })
   });
 
-  const footer = tpl`
-    <p class="desc" style="margin-top:22px">
-      也可以看看 <a href="#/posts" style="color:var(--celadon)">帖子</a>——那是另一套更短的内容。
-    </p>`;
-
-  return tpl`<div>${head}${chips}<div style="margin-top:18px">${feed}</div>${footer}</div>`;
+  return tpl`<div>${head}${chips}<div style="margin-top:18px">${feed}</div></div>`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -107,7 +102,7 @@ export async function renderForumCategory(ctx, { category }) {
 
   const page = pageFromQuery(ctx.query);
 
-  const feed = await renderPagedFeed({
+  const feed = renderPagedFeed({
     page,
     columns: 'rowlist',
     render: (thread) => threadNode(thread),
@@ -235,7 +230,7 @@ export async function renderPosts(ctx) {
 
   const page = pageFromQuery(ctx.query);
 
-  const feed = await renderPagedFeed({
+  const feed = renderPagedFeed({
     page,
     columns: 'rowlist',
     render: (post) => postNode(post),

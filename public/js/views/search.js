@@ -12,43 +12,78 @@ import router from '../router.js';
 import { getSetting, getSession } from '../store.js';
 import { icon, stateBlock, tpl } from '../ui.js';
 
+/**
+ * 搜索类型。
+ *
+ * ⚠️ 上游的 type 是**复数**：videos / images / users / posts / forum。
+ * 传单数（video、image…）不会报错说明原因，而是直接返回
+ * 500 {"message":"errors.serverError"} —— 这就是搜索"用不了"的原因。
+ *
+ * 另外 forum 这个值上游目前同样返回 500（服务端故障），
+ * 前端单独标注，避免让人以为是本站的问题。
+ */
 const TYPES = [
-  { id: 'video', label: '视频' },
-  { id: 'image', label: '图库' },
-  { id: 'user', label: '作者' },
-  { id: 'forum', label: '论坛' },
-  { id: 'post', label: '帖子' }
+  { id: 'videos', label: '视频' },
+  { id: 'images', label: '图库' },
+  { id: 'users', label: '作者' },
+  { id: 'posts', label: '帖子' },
+  { id: 'forum', label: '论坛', unsupported: true }
 ];
 
-const TYPE_LABELS = Object.fromEntries(TYPES.map((item) => [item.id, item.label]));
+// 地址栏沿用旧短名，避免已分享的链接失效。
+const TYPE_ALIASES = {
+  video: 'videos',
+  image: 'images',
+  user: 'users',
+  post: 'posts',
+  forum: 'forum'
+};
 
+/** 把地址里的 type 归一成上游要求的复数形式。 */
+function normalizeType(value) {
+  const raw = String(value || '').trim();
+  return TYPE_ALIASES[raw] || (TYPES.some((t) => t.id === raw) ? raw : 'videos');
+}
+
+// 键与 TYPES 的 id 一致（复数）
 const EMPTY = {
-  video: {
+  videos: {
     title: '没有搜到匹配的视频',
     message: '换个关键词，或者把类型切到「图库」「作者」再试一次。'
   },
-  image: {
+  images: {
     title: '没有搜到匹配的图库',
     message: '图库标题常常和视频不同，试试系列名、作者名或更短的词。'
   },
-  user: {
+  users: {
     title: '没有搜到这位作者',
     message: '检查用户名拼写，或者改用作品标题搜索。'
+  },
+  posts: {
+    title: '没有匹配的帖子',
+    message: '换更宽泛的词，或者直接去论坛主题列表翻一翻。'
   },
   forum: {
     title: '论坛里没有相关主题',
     message: '论坛内容比作品少很多，换更宽泛的词试试。'
-  },
-  post: {
-    title: '没有匹配的帖子',
-    message: '换更宽泛的词，或者直接去论坛主题列表翻一翻。'
   }
 };
 
 /** 结果可能把作品包在 video / image / user / thread 字段里，统一取出来。 */
+/**
+ * 把结果条目归一成「真正的那个对象」。
+ *
+ * ⚠️ 不能顺手写 item.user：作品对象自己就有 user 字段（作者），
+ * 那样会把整个作品替换成作者，标题就变成「无标题」——这个 bug 踩过。
+ * 只有帖子/论坛这类"包了一层"的结果才需要拆，判据是外层没有 id 之外的业务字段。
+ */
 function unwrap(item) {
   if (!item || typeof item !== 'object') return item;
-  return item.video || item.image || item.user || item.thread || item;
+  // 作品/图库/用户本身已经是目标对象，直接返回
+  if (item.title || item.file || item.thumbnail || (item.id && !item.video && !item.thread)) {
+    return item;
+  }
+  return item.video || item.image || item.thread || item;
 }
 
 /* ------------------------------------------------------------------ *
@@ -108,10 +143,10 @@ function postNode(item) {
 function resultNode(item, type) {
   const value = unwrap(item);
   if (!value || typeof value !== 'object') return rowNode({ title: '无法识别的结果条目', meta: [] });
-  if (type === 'user') return personCard(value);
+  if (type === 'users') return personCard(value);
   if (type === 'forum') return forumNode(value);
-  if (type === 'post') return postNode(value);
-  return workCard(value, type === 'image' ? 'image' : 'video');
+  if (type === 'posts') return postNode(value);
+  return workCard(value, type === 'images' ? 'image' : 'video');
 }
 
 /* ------------------------------------------------------------------ *
@@ -186,7 +221,7 @@ function tagsPanel(ctx) {
     for (const tag of list) {
       const label = tagLabel(tag.id);
       row.append(
-        tpl`<a class="tagchip" href="#/search?q=${encodeURIComponent(label)}&type=video">${label}${tag.count ? tpl`<span class="chip__n">${formatCount(tag.count)}</span>` : null}</a>`
+        tpl`<a class="tagchip" href="#/search?q=${encodeURIComponent(label)}&type=videos">${label}${tag.count ? tpl`<span class="chip__n">${formatCount(tag.count)}</span>` : null}</a>`
       );
     }
     body.replaceChildren(row);
@@ -202,20 +237,23 @@ function tagsPanel(ctx) {
 
 export async function renderSearch(ctx) {
   const query = (ctx.query.get('q') || '').trim();
-  let type = ctx.query.get('type') || 'video';
-  if (!TYPE_LABELS[type]) type = 'video';
+  // 统一成上游要求的复数形式（videos / images / users / posts / forum）
+  const type = normalizeType(ctx.query.get('type'));
+  const typeMeta = TYPES.find((t) => t.id === type) || TYPES[0];
 
   const session = getSession();
   const inlineToken = String(getSetting('token') || '').trim();
-  const canSearch = session.authenticated || !!inlineToken;
+  // 共享 Token（服务端 IWARA_AUTHORIZATION）也能搜，所以要把这个也算进去，
+  // 否则配了共享身份前端还是会显示"请先登录"。
+  const canSearch = session.authenticated || !!inlineToken || !!session.sharedToken;
 
   const countNode = tpl`<span class="lede__count"></span>`;
   const head = lede({
     eyebrow: 'SEARCH',
     title: query ? `“${query}”` : '搜索',
     desc: query
-      ? `正在按${TYPE_LABELS[type]}搜索。请求由 Worker 带你的 Token 发给 Iwara 上游。`
-      : '输入作品标题、作者名或标签。搜索接口在上游要求认证，所以未登录时用不了。'
+      ? `正在按${typeMeta.label}搜索。`
+      : '输入作品标题、作者名或标签。搜索接口在上游要求认证，未登录时用不了。'
   });
   head.append(countNode);
 
@@ -254,12 +292,21 @@ export async function renderSearch(ctx) {
 
   if (!query) {
     body.append(tagsPanel(ctx));
+  } else if (typeMeta.unsupported) {
+    // 上游的 forum 搜索目前固定 500，直接说明，别让它看起来像本站故障
+    body.append(
+      stateBlock({
+        title: '论坛搜索暂时不可用',
+        message:
+          'Iwara 的论坛搜索接口目前在服务端报错，视频、图库、作者、帖子都能搜。可以先按关键词搜帖子，或直接浏览论坛列表。'
+      })
+    );
   } else if (canSearch) {
-    const isRow = type === 'forum' || type === 'post';
+    const isRow = type === 'posts';
     const page = pageFromQuery(ctx.query);
-    const feed = await renderPagedFeed({
+    const feed = renderPagedFeed({
       page,
-      columns: type === 'user' ? 'grid--people' : isRow ? 'rowlist' : '',
+      columns: type === 'users' ? 'grid--people' : isRow ? 'rowlist' : '',
       hrefFor: (target) =>
         `#/search?q=${encodeURIComponent(query)}&type=${type}&page=${target + 1}`,
       emptyTitle: EMPTY[type].title,

@@ -216,7 +216,7 @@ export function imageGalleryCoverUrl(item) {
   if (item?.customThumbnail?.id && item?.customThumbnail?.name) {
     return imageUrl(item.customThumbnail, 'large');
   }
-  if (item?.thumbnail?.id && item?.thumbnail?.name) return imageUrl(item.thumbnail, 'large');
+  if (item?.thumbnail?.id && item?.thumbnail?.name) return galleryStillUrl(item.thumbnail);
   return PLACEHOLDER;
 }
 
@@ -245,9 +245,37 @@ export function playlistCoverUrl(playlist) {
   return PLACEHOLDER;
 }
 
-/** 图库内的单张原图。 */
+/**
+ * 这个文件是不是视频。
+ *
+ * 图库作品里可能混着动图：Iwara 把动图存成 .webm，
+ * 用 <img> 渲染必然失败（而且缩略图端点对 .webm 回的是 video/webm，不是静态图）。
+ */
+export function isVideoFile(file) {
+  const mime = String(file?.mime || '').toLowerCase();
+  if (mime.startsWith('video/')) return true;
+  if (mime.startsWith('image/')) return false;
+  return /\.(webm|mp4|mov|m4v)$/i.test(String(file?.name || ''));
+}
+
+/** 图库内单张原图/原视频的地址。 */
 export function galleryImageUrl(file) {
   return imageUrl(file, 'original');
+}
+
+/**
+ * 图库条目的静态封面。
+ *
+ * 缩略图是视频时，`/image/large/<id>/<name>.webm` 回的是 video/webm，塞进
+ * <img> 就是坏图。这种情况改用 `thumbnail-00.jpg` —— 上游对视频文件会把它
+ * 渲染成真正的 jpeg 静帧。
+ */
+export function galleryStillUrl(file) {
+  if (!file?.id) return PLACEHOLDER;
+  if (isVideoFile(file)) {
+    return `/media/i/image/thumbnail/${encodeURIComponent(file.id)}/thumbnail-00.jpg`;
+  }
+  return imageUrl(file, 'large');
 }
 
 /* ------------------------------------------------------------------ *

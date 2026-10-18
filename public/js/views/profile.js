@@ -96,10 +96,12 @@ export async function renderProfile(ctx, { username }) {
   // 头部里的作品数是另一个节点，用同一个引用统一更新。
   head.querySelector('[data-stat="works"]').replaceWith(worksStat);
 
+  // 关于简介放在资料头之后、标签栏之前：
+  // 之前它夹在排序条和作品列表中间，和作品贴得太近，看着挤。
   const bodyPanel = profile.body
     ? tpl`
-      <div class="panel">
-        <div class="panel__title">关于</div>
+      <div class="profile__bio">
+        <div class="profile__bio-title">关于</div>
         <div class="desc is-clamped"></div>
       </div>`
     : null;
@@ -118,7 +120,7 @@ export async function renderProfile(ctx, { username }) {
 
   const tabBar = tpl`<div class="chips chips--scroll"></div>`;
   const sortBar = tpl`<div class="chips chips--scroll"></div>`;
-  const content = tpl`<div></div>`;
+  const content = tpl`<div class="profile__content"></div>`;
   let feed = null;
 
   function paintSortBar() {
@@ -158,14 +160,18 @@ export async function renderProfile(ctx, { username }) {
     }
   }
 
-  async function mountContent() {
+  // 切标签会连续调用，用一个序号让旧的请求结果不再写 DOM。
+  let mountSeq = 0;
+
+  function mountContent() {
+    const seq = ++mountSeq;
     content.replaceChildren();
 
     const tabPage = pageFromQuery(ctx.query);
 
     if (active === 'videos' || active === 'images') {
       const isImage = active === 'images';
-      feed = await renderPagedFeed({
+      feed = renderPagedFeed({
         page: tabPage,
         kind: isImage ? 'image' : 'video',
         hrefFor: (target) =>
@@ -175,7 +181,7 @@ export async function renderProfile(ctx, { username }) {
         fetchPage: async (target, limit) => {
           const params = { user: user.id, page: target, limit, sort, rating: ratingParam() };
           const data = isImage ? await fetchImages(params) : await fetchVideos(params);
-          if (target === 0) worksStat.textContent = formatCount(data?.count);
+          if (target === 0 && seq === mountSeq) worksStat.textContent = formatCount(data?.count);
           return data;
         }
       });
@@ -184,7 +190,7 @@ export async function renderProfile(ctx, { username }) {
     }
 
     if (active === 'playlists') {
-      feed = await renderPagedFeed({
+      feed = renderPagedFeed({
         page: tabPage,
         hrefFor: (target) =>
           `#/user/${encodeURIComponent(user.username)}?tab=playlists&page=${target + 1}`,
@@ -205,7 +211,7 @@ export async function renderProfile(ctx, { username }) {
     }
 
     const target = active === 'followers' ? followersStat : followingStat;
-    feed = await renderPagedFeed({
+    feed = renderPagedFeed({
       page: tabPage,
       columns: 'grid--people',
       hrefFor: (page) =>
@@ -219,7 +225,7 @@ export async function renderProfile(ctx, { username }) {
       fetchPage: async (page, limit) => {
         const fetcher = active === 'followers' ? fetchFollowers : fetchFollowing;
         const data = await fetcher(user.id, { page, limit });
-        if (page === 0) target.textContent = formatCount(data?.count);
+        if (page === 0 && seq === mountSeq) target.textContent = formatCount(data?.count);
         return data;
       }
     });
@@ -253,5 +259,5 @@ export async function renderProfile(ctx, { username }) {
       ${user.createdAt ? `加入于 ${formatDate(user.createdAt)} · ` : ''}主页：<a href="https://www.iwara.tv/profile/${encodeURIComponent(user.username || '')}" target="_blank" rel="noopener noreferrer">iwara.tv/profile/${user.username || ''}</a>
     </p>`;
 
-  return tpl`<div>${head}${meta}${tabBar}${sortBar}${bodyPanel}${content}</div>`;
+  return tpl`<div>${head}${meta}${bodyPanel}${tabBar}${sortBar}${content}</div>`;
 }

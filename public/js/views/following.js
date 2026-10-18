@@ -45,7 +45,7 @@ export async function renderFollowing(ctx) {
     desc: '你关注的作者。点头像进入他们的主页，能看到最近发布的作品。'
   });
 
-  const feed = await renderPagedFeed({
+  const feed = renderPagedFeed({
     page,
     columns: 'grid--people',
     hrefFor: (target) => `#/library/following?page=${target + 1}`,

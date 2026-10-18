@@ -37,7 +37,7 @@ export async function renderTag(ctx, { id }) {
     );
   }
 
-  const feed = await renderPagedFeed({
+  const feed = renderPagedFeed({
     page,
     kind: 'video',
     hrefFor: (target) =>

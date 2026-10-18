@@ -41,9 +41,8 @@
     // 公开部署强烈建议开启，避免额度被陌生人消耗。用 wrangler secret put 配置更安全。
     "BASIC_AUTH_USER": "",
     "BASIC_AUTH_PASS": "",
-    // 访客共享 Token（可选）：填入 Iwara 的 access token 后，未登录访客也能使用搜索等功能。
-    // 更推荐用 wrangler secret put IWARA_AUTHORIZATION 配置。
-    "IWARA_AUTHORIZATION": "",
+    // 访客共享 Token 用 secret 配置（不能与 vars 同名，否则会冲突）：
+    //   wrangler secret put IWARA_AUTHORIZATION
     // 上游接口缓存秒数，用于节省 Worker 请求数。设为 0 关闭。
     "API_CACHE_TTL": "30",
     // 封面图缓存秒数。

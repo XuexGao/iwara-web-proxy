@@ -34,7 +34,7 @@ export async function renderHome(ctx) {
     desc: INTRO[sort] || ''
   });
 
-  const feed = await renderPagedFeed({
+  const feed = renderPagedFeed({
     page,
     kind: 'video',
     hrefFor: (target) => `#/?sort=${sort}&page=${target + 1}`,
@@ -44,11 +44,5 @@ export async function renderHome(ctx) {
       fetchVideos({ page: target, limit, sort, rating: ratingParam() })
   });
 
-  const footer = tpl`
-    <div style="margin-top:34px" class="note">
-      想按题材找？点任意作品下方的标签，就能顺着它找到同类作品。
-      顶部的搜索框也支持关键词，搜索需要登录 Iwara 账号。
-    </div>`;
-
-  return tpl`<div>${head}${sortChips}<div style="margin-top:18px">${feed}</div>${footer}</div>`;
+  return tpl`<div>${head}${sortChips}<div style="margin-top:18px">${feed}</div></div>`;
 }
