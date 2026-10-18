@@ -15,9 +15,9 @@ import {
   formatDate,
   profileHeaderUrl
 } from '../api.js';
-import { createFeed, personCard, playlistCard } from '../cards.js';
+import { pageFromQuery, personCard, playlistCard, renderPagedFeed } from '../cards.js';
 import { getSession, getSetting, ratingParam } from '../store.js';
-import { SORT_OPTIONS, icon, linkify, stateBlock, tpl, toast, toastError } from '../ui.js';
+import { SORT_OPTIONS, icon, linkifyNode, stateBlock, tpl, toast, toastError } from '../ui.js';
 
 const TABS = [
   { id: 'videos', label: '作品', icon: 'grid' },
@@ -105,7 +105,7 @@ export async function renderProfile(ctx, { username }) {
     : null;
   if (bodyPanel) {
     const desc = bodyPanel.querySelector('.desc');
-    desc.append(linkify(profile.body));
+    desc.append(linkifyNode(profile.body));
     desc.addEventListener('click', () => desc.classList.toggle('is-clamped'));
   }
 
@@ -131,6 +131,11 @@ export async function renderProfile(ctx, { username }) {
       chip.addEventListener('click', () => {
         sort = option.id;
         paintSortBar();
+        history.replaceState(
+          null,
+          '',
+          `#/user/${encodeURIComponent(user.username)}?tab=${active}&sort=${sort}`
+        );
         mountContent();
       });
       sortBar.append(chip);
@@ -145,64 +150,72 @@ export async function renderProfile(ctx, { username }) {
         active = tab.id;
         paintTabs();
         paintSortBar();
+        // 切标签时回到第 1 页：否则上一栏的页码会串到新的一栏。
+        history.replaceState(null, '', `#/user/${encodeURIComponent(user.username)}?tab=${active}`);
         mountContent();
       });
       tabBar.append(chip);
     }
   }
 
-  function mountContent() {
-    if (feed) feed.stop();
+  async function mountContent() {
     content.replaceChildren();
+
+    const tabPage = pageFromQuery(ctx.query);
 
     if (active === 'videos' || active === 'images') {
       const isImage = active === 'images';
-      feed = createFeed({
+      feed = await renderPagedFeed({
+        page: tabPage,
         kind: isImage ? 'image' : 'video',
-        limit: 32,
+        hrefFor: (target) =>
+          `#/user/${encodeURIComponent(user.username)}?tab=${active}&sort=${sort}&page=${target + 1}`,
         emptyTitle: isImage ? '这位作者还没有图库作品' : '这位作者还没有视频作品',
         emptyMessage: '换到另一个标签看看，或者去首页按标签找找。',
-        fetchPage: async (page, limit) => {
-          const params = { user: user.id, page, limit, sort, rating: ratingParam() };
+        fetchPage: async (target, limit) => {
+          const params = { user: user.id, page: target, limit, sort, rating: ratingParam() };
           const data = isImage ? await fetchImages(params) : await fetchVideos(params);
-          if (page === 0) {
-            worksStat.textContent = formatCount(data?.count);
-          }
+          if (target === 0) worksStat.textContent = formatCount(data?.count);
           return data;
         }
       });
-      content.append(feed.element);
+      content.append(feed);
       return;
     }
 
     if (active === 'playlists') {
-      feed = createFeed({
-        limit: 32,
+      feed = await renderPagedFeed({
+        page: tabPage,
+        hrefFor: (target) =>
+          `#/user/${encodeURIComponent(user.username)}?tab=playlists&page=${target + 1}`,
         render: (item) => playlistCard(item),
         emptyTitle: '这位作者还没有公开的播放列表',
         emptyMessage: '作者没整理合集，直接看作品列表也是一样的。',
-        fetchPage: async (page, limit) => {
+        fetchPage: async (target, limit) => {
           try {
-            const data = await fetchPlaylists({ user: user.id, page, limit });
-            return data;
+            return await fetchPlaylists({ user: user.id, page: target, limit });
           } catch {
-            // 上游不支持按作者过滤时退化成公开列表，并说明清楚。
-            const data = await fetchPlaylists({ page, limit });
-            return data;
+            // 上游不支持按作者过滤时退化成公开列表。
+            return fetchPlaylists({ page: target, limit });
           }
         }
       });
-      content.append(feed.element);
+      content.append(feed);
       return;
     }
 
     const target = active === 'followers' ? followersStat : followingStat;
-    feed = createFeed({
+    feed = await renderPagedFeed({
+      page: tabPage,
       columns: 'grid--people',
-      limit: 50,
-      render: (item) => personCard(item),
+      hrefFor: (page) =>
+        `#/user/${encodeURIComponent(user.username)}?tab=${active}&page=${page + 1}`,
+      // 上游的关系列表不是裸用户：粉丝是 { id, createdAt, follower: {...} }，
+      // 关注是 { id, createdAt, user: {...} }。直接渲染外层就成了"匿名"。
+      render: (item) => personCard(item.follower || item.user || item),
       emptyTitle: active === 'followers' ? '还没有粉丝' : '还没有关注任何人',
       emptyMessage: '这一栏会随着作者在 Iwara 上的互动变化。',
+      limit: 30,
       fetchPage: async (page, limit) => {
         const fetcher = active === 'followers' ? fetchFollowers : fetchFollowing;
         const data = await fetcher(user.id, { page, limit });
@@ -210,13 +223,12 @@ export async function renderProfile(ctx, { username }) {
         return data;
       }
     });
-    content.append(feed.element);
+    content.append(feed);
   }
 
   paintTabs();
   paintSortBar();
   mountContent();
-  ctx.onCleanup(() => feed?.stop());
 
   // 关注数单独拉一次，用来填头部统计（作品数由首个 feed 填充）。
   (async () => {

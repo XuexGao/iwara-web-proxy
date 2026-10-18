@@ -13,8 +13,8 @@ import {
   formatDate,
   iwara
 } from '../api.js';
-import { createFeed, lede, userLink } from '../cards.js';
-import { linkify, raw, stateBlock, tpl } from '../ui.js';
+import { lede, pageFromQuery, renderPagedFeed, userLink } from '../cards.js';
+import { linkifyNode, raw, stateBlock, tpl } from '../ui.js';
 
 /* ------------------------------------------------------------------ *
  * 公共行式列表
@@ -74,26 +74,24 @@ export async function renderForum(ctx) {
     );
   }
 
-  const feed = createFeed({
+  const page = pageFromQuery(ctx.query);
+
+  const feed = await renderPagedFeed({
+    page,
     columns: 'rowlist',
-    limit: 32,
     render: (thread) => threadNode(thread),
+    hrefFor: (target) => `#/forum?sort=${sort}&page=${target + 1}`,
     emptyTitle: '论坛暂时没有主题',
     emptyMessage: '过一会儿再来看看，或者去帖子列表转转。',
-    fetchPage: async (page, limit) => {
-      const data = await fetchForumThreads({ page, limit });
-      return data;
-    }
+    fetchPage: (target, limit) => fetchForumThreads({ page: target, limit })
   });
-  if (feed.grid) feed.grid.style.gap = '0';
-  ctx.onCleanup(() => feed.stop());
 
   const footer = tpl`
     <p class="desc" style="margin-top:22px">
       也可以看看 <a href="#/posts" style="color:var(--celadon)">帖子</a>——那是另一套更短的内容。
     </p>`;
 
-  return tpl`<div>${head}${chips}${feed.element}${footer}</div>`;
+  return tpl`<div>${head}${chips}<div style="margin-top:18px">${feed}</div>${footer}</div>`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -107,21 +105,19 @@ export async function renderForumCategory(ctx, { category }) {
     desc: '这个分区下的主题。'
   });
 
-  const feed = createFeed({
+  const page = pageFromQuery(ctx.query);
+
+  const feed = await renderPagedFeed({
+    page,
     columns: 'rowlist',
-    limit: 32,
     render: (thread) => threadNode(thread),
+    hrefFor: (target) => `#/forum/${encodeURIComponent(category)}?page=${target + 1}`,
     emptyTitle: '这个分区还没有主题',
     emptyMessage: '换个分区，或者回到论坛总表。',
-    fetchPage: async (page, limit) => {
-      const data = await fetchForumThreads({ page, limit, category });
-      return data;
-    }
+    fetchPage: (target, limit) => fetchForumThreads({ page: target, limit, category })
   });
-  if (feed.grid) feed.grid.style.gap = '0';
-  ctx.onCleanup(() => feed.stop());
 
-  return tpl`<div>${head}${tpl`<p class="desc"><a href="#/forum" style="color:var(--celadon)">← 回到论坛总表</a></p>`}${feed.element}</div>`;
+  return tpl`<div>${head}${tpl`<p class="desc"><a href="#/forum" style="color:var(--celadon)">← 回到论坛总表</a></p>`}<div style="margin-top:18px">${feed}</div></div>`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -163,7 +159,7 @@ export async function renderForumThread(ctx, { category, threadId }) {
   const bodyPanel = bodySource
     ? tpl`<div class="panel"><div class="panel__title">正文</div><div class="desc"></div></div>`
     : null;
-  if (bodyPanel) bodyPanel.querySelector('.desc').append(linkify(stripHtml(bodySource)));
+  if (bodyPanel) bodyPanel.querySelector('.desc').append(linkifyNode(stripHtml(bodySource)));
 
   const replyPanel = tpl`
     <div class="panel">
@@ -184,7 +180,9 @@ export async function renderForumThread(ctx, { category, threadId }) {
             <p class="comment__text"></p>
           </div>
         </article>`;
-      node.querySelector('.comment__text').append(linkify(stripHtml(reply.body || reply.content || '')));
+      node.querySelector('.comment__text').append(
+        linkifyNode(stripHtml(reply.body || reply.content || ''))
+      );
       replyPanel.append(node);
     }
   } else {
@@ -235,21 +233,19 @@ export async function renderPosts(ctx) {
     desc: '比论坛主题更短的内容，通常是作者公告或随手分享。'
   });
 
-  const feed = createFeed({
+  const page = pageFromQuery(ctx.query);
+
+  const feed = await renderPagedFeed({
+    page,
     columns: 'rowlist',
-    limit: 32,
     render: (post) => postNode(post),
+    hrefFor: (target) => `#/posts?page=${target + 1}`,
     emptyTitle: '还没有帖子',
     emptyMessage: '过一会儿再来看看。',
-    fetchPage: async (page, limit) => {
-      const data = await fetchPosts({ page, limit });
-      return data;
-    }
+    fetchPage: (target, limit) => fetchPosts({ page: target, limit })
   });
-  if (feed.grid) feed.grid.style.gap = '0';
-  ctx.onCleanup(() => feed.stop());
 
-  return tpl`<div>${head}${feed.element}</div>`;
+  return tpl`<div>${head}<div style="margin-top:18px">${feed}</div></div>`;
 }
 
 function postNode(post) {
@@ -278,7 +274,7 @@ function postNode(post) {
       const full = await iwara(`/post/${encodeURIComponent(post.id)}`);
       const body = stripHtml(full?.body || full?.content || full?.post?.body || '');
       const detail = tpl`<div class="desc"></div>`;
-      detail.append(linkify(body || '这条帖子没有正文。'));
+      detail.append(linkifyNode(body || '这条帖子没有正文。'));
       node.querySelector('.rowitem__main').append(detail);
       button.remove();
     } catch (error) {

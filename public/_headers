@@ -1,4 +1,8 @@
 /*
+  # script-src 只留 'self'：Cloudflare 会在部分域名上注入 Web Analytics，
+  # 那个脚本的 integrity 与改写后的响应体对不上，控制台会刷 SRI 报错。
+  # 不放行它可以让 CSP 直接拦掉，页面功能不受影响（那条报错是浏览器提示，
+  # 无法从 Worker 侧消除，因为注入发生在域名层）。
   Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'
   X-Content-Type-Options: nosniff
   Referrer-Policy: same-origin

@@ -327,7 +327,11 @@ export const RATING_LABELS = {
   ecchi: 'R18'
 };
 
-/** 把一段纯文本里的 URL 变成可点链接（已转义，安全）。 */
+/**
+ * 把一段纯文本里的 URL 变成可点链接，返回 HTML 字符串包装（给 tpl 用）。
+ * ⚠️ 不能直接 append 到 DOM：raw() 是包装对象，append 会渲染成 "[object Object]"。
+ *   需要节点请用 linkifyNode()。
+ */
 export function linkify(text) {
   const value = String(text || '');
   const parts = [];
@@ -344,4 +348,35 @@ export function linkify(text) {
   }
   if (last < value.length) parts.push(esc(value.slice(last)));
   return raw(parts.join(''));
+}
+
+
+/**
+ * 与 linkify 相同的效果，但返回真实 DOM 节点，可直接 append。
+ *
+ * 之所以要两个版本：linkify() 返回的是 raw 包装，只适合放进 tpl 的插值里。
+ * 论坛回复、作者简介这些是运行时才知道内容的地方，只能 append，
+ * 用错就会出现 "[object Object]"。
+ */
+export function linkifyNode(text) {
+  const fragment = document.createDocumentFragment();
+  const value = String(text || '');
+  const pattern = /https?:\/\/[^\s<>"']+/g;
+  let last = 0;
+  let match;
+
+  while ((match = pattern.exec(value))) {
+    if (match.index > last) {
+      fragment.append(document.createTextNode(value.slice(last, match.index)));
+    }
+    const anchor = document.createElement('a');
+    anchor.href = match[0];
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer nofollow';
+    anchor.textContent = match[0];
+    fragment.append(anchor);
+    last = match.index + match[0].length;
+  }
+  if (last < value.length) fragment.append(document.createTextNode(value.slice(last)));
+  return fragment;
 }

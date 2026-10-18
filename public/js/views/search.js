@@ -7,7 +7,7 @@
  */
 
 import { fetchTags, formatCount, formatDate, search, tagLabel } from '../api.js';
-import { createFeed, lede, personCard, workCard } from '../cards.js';
+import { lede, pageFromQuery, personCard, renderPagedFeed, workCard } from '../cards.js';
 import router from '../router.js';
 import { getSetting, getSession } from '../store.js';
 import { icon, stateBlock, tpl } from '../ui.js';
@@ -256,15 +256,18 @@ export async function renderSearch(ctx) {
     body.append(tagsPanel(ctx));
   } else if (canSearch) {
     const isRow = type === 'forum' || type === 'post';
-    const feed = createFeed({
+    const page = pageFromQuery(ctx.query);
+    const feed = await renderPagedFeed({
+      page,
       columns: type === 'user' ? 'grid--people' : isRow ? 'rowlist' : '',
-      limit: 32,
+      hrefFor: (target) =>
+        `#/search?q=${encodeURIComponent(query)}&type=${type}&page=${target + 1}`,
       emptyTitle: EMPTY[type].title,
       emptyMessage: EMPTY[type].message,
       render: (item) => resultNode(item, type),
-      fetchPage: async (page, limit) => {
-        const data = await search({ query, type, page, limit });
-        if (page === 0) {
+      fetchPage: async (target, limit) => {
+        const data = await search({ query, type, page: target, limit });
+        if (target === 0) {
           const count = Number(data?.count);
           countNode.replaceChildren(
             Number.isFinite(count) ? tpl`<b>${formatCount(count)}</b><br />条结果` : document.createTextNode('')
@@ -273,11 +276,7 @@ export async function renderSearch(ctx) {
         return data;
       }
     });
-    // createFeed 的容器默认是 .grid；论坛/帖子要单列列表，复用已有的 .rowlist
-    //（它在 app.css 里排在 .grid 之后，display: flex 会覆盖掉 grid）。
-    if (isRow) feed.grid.style.gap = '0';
-    body.append(feed.element);
-    ctx.onCleanup(() => feed.stop());
+    body.append(feed);
   }
 
   return tpl`<div>${head}${form}${chips}${body}</div>`;

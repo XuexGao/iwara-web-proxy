@@ -30,6 +30,7 @@ import { renderTag } from './views/tags.js';
 import { renderGallery, renderImages, renderPlaylist, renderPlaylists } from './views/gallery.js';
 import { renderProfile } from './views/profile.js';
 import { renderSubscriptions } from './views/subscriptions.js';
+import { renderFollowing } from './views/following.js';
 import { renderForum, renderForumCategory, renderForumThread, renderPosts } from './views/forum.js';
 import { renderAbout, renderLibrary, renderSettings } from './views/library.js';
 import { renderLogin } from './views/login.js';
@@ -43,6 +44,7 @@ router
   .route('/search', renderSearch)
   .route('/tag/:id', renderTag)
   .route('/subscriptions', renderSubscriptions)
+  .route('/library/following', renderFollowing)
   .route('/images', renderImages)
   .route('/image/:id', renderGallery)
   .route('/playlists', renderPlaylists)

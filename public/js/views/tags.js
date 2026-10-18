@@ -1,9 +1,9 @@
 /**
- * 标签：总览与单个标签下的作品。
+ * 单个标签下的作品列表。
  */
 
 import { fetchTag, fetchVideos, formatCount, tagLabel } from '../api.js';
-import { createFeed, lede } from '../cards.js';
+import { lede, pageFromQuery, renderPagedFeed } from '../cards.js';
 import { getSetting, ratingParam } from '../store.js';
 import { SORT_LABELS, SORT_OPTIONS, stateBlock, tpl } from '../ui.js';
 
@@ -13,14 +13,11 @@ const TYPE_LABELS = {
   source: '来源'
 };
 
-/* ------------------------------------------------------------------ *
- * 单个标签
- * ------------------------------------------------------------------ */
-
 export async function renderTag(ctx, { id }) {
   let sort = ctx.query.get('sort') || getSetting('sort') || 'trending';
   if (!SORT_LABELS[sort]) sort = 'trending';
 
+  const page = pageFromQuery(ctx.query);
   const display = tagLabel(id);
 
   const head = lede({
@@ -40,39 +37,28 @@ export async function renderTag(ctx, { id }) {
     );
   }
 
-  const toolbar = sortChips;
+  const feed = await renderPagedFeed({
+    page,
+    kind: 'video',
+    hrefFor: (target) =>
+      `#/tag/${encodeURIComponent(id)}?sort=${sort}&page=${target + 1}`,
+    emptyTitle: `「${display}」下面还没有作品`,
+    emptyMessage: '这个标签可能刚建立，或者作品还没被归到它下面。换一个标签试试。',
+    fetchPage: (target, limit) =>
+      fetchVideos({ tags: id, page: target, limit, sort, rating: ratingParam() })
+  });
 
-  const feedHost = tpl`<div></div>`;
-
-  function buildFeed() {
-    return createFeed({
-      kind: 'video',
-      limit: 32,
-      emptyTitle: `「${display}」下面还没有作品`,
-      emptyMessage: '这个标签可能刚建立，或者作品还没被归到它下面。换一个标签试试。',
-      fetchPage: async (page, limit) => {
-        const data = await fetchVideos({ tags: id, page, limit, sort, rating: ratingParam() });
-        return data;
-      }
-    });
-  }
-
-  let feed = buildFeed();
-  feedHost.replaceChildren(feed.element);
-  ctx.onCleanup(() => feed.stop());
-
-  // 标签本身的元信息（类型 / 是否敏感）由详情接口提供。
-  (async () => {
-    try {
-      const tag = await fetchTag(id);
-      if (ctx.signal.aborted || !tag) return;
+  // 标签元信息由详情接口提供，拿不到不影响列表
+  try {
+    const tag = await fetchTag(id);
+    if (tag) {
       if (tag.type) metaLine.append(tpl`<span class="badge">${TYPE_LABELS[tag.type] || tag.type}</span>`);
       if (tag.sensitive) metaLine.append(tpl`<span class="badge badge--ecchi">敏感标签</span>`);
       if (tag.count) metaLine.append(tpl`<span class="badge">${formatCount(tag.count)} 件作品</span>`);
-    } catch {
-      /* 拿不到元信息不影响列表 */
     }
-  })();
+  } catch {
+    /* 忽略 */
+  }
 
-  return tpl`<div>${head}${metaLine}${toolbar}${feedHost}</div>`;
+  return tpl`<div>${head}${metaLine}${sortChips}<div style="margin-top:18px">${feed}</div></div>`;
 }

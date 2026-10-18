@@ -181,6 +181,33 @@ function normalizeSourceUrl(raw) {
   return value.startsWith('//') ? `https:${value}` : value;
 }
 
+/**
+ * 把作品标题清洗成可用的文件名。
+ *
+ * 需要处理的：文件名非法字符、路径分隔符、控制字符、首尾的点与空格、
+ * 以及超长标题（多数文件系统上限 255 字节，中日韩字符每字 3 字节，
+ * 所以这里按字符数保守截断到 80）。
+ */
+function safeFileBase(title, fallbackName, ext) {
+  const raw = String(title || '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    // Windows / macOS / Linux 都不接受的字符
+    .replace(/[\\/:*?"<>|]/g, '_')
+    // 连续空白压成一个
+    .replace(/\s+/g, ' ')
+    .trim()
+    // 首尾的点会让文件变隐藏文件或被系统忽略
+    .replace(/^[.\s]+|[.\s]+$/g, '');
+
+  if (raw) return raw.slice(0, 80);
+
+  // 标题为空时退到上游文件名，但去掉扩展名与 UUID 后缀
+  const stripped = String(fallbackName || '')
+    .replace(new RegExp(`\\${ext}$`, 'i'), '')
+    .trim();
+  return stripped ? stripped.slice(0, 80) : 'iwara-video';
+}
+
 function localMediaUrl(absoluteUrl, filename) {
   const params = new URLSearchParams({ u: absoluteUrl });
   if (filename) params.set('dl', filename);
@@ -273,7 +300,10 @@ export async function handleSources(request, env, videoId, auth) {
     return json({ error: '视频清晰度清单为空，可能仍在转码中，稍后再试。' }, 409);
   }
 
-  const fileName = String(detail?.file?.name || `${videoId}.mp4`);
+  // 下载文件名用作品标题，而不是上游的 <uuid>_Source.mp4——
+  // 后者下下来是一串看不出内容的 UUID，等于没名字。
+  const ext = (String(detail?.file?.name || '').match(/\.[a-z0-9]{2,5}$/i) || ['.mp4'])[0];
+  const baseName = safeFileBase(detail?.title, detail?.file?.name, ext);
   const sources = list
     .map((item) => {
       const name = String(item?.name || '');
@@ -281,11 +311,12 @@ export async function handleSources(request, env, videoId, auth) {
       const download = normalizeSourceUrl(item?.src?.download);
       if (!view) return null;
       const isPreview = name === 'preview';
+      // 只有非原画档才加清晰度后缀，原画保持干净的作品名。
       const downloadName = isPreview
-        ? fileName.replace(/(\.[a-z0-9]+)$/i, '_preview$1')
+        ? `${baseName}_preview${ext}`
         : name === 'Source'
-          ? fileName
-          : fileName.replace(/(\.[a-z0-9]+)$/i, `_${name}$1`);
+          ? `${baseName}${ext}`
+          : `${baseName}_${name}${ext}`;
       return {
         name,
         label: QUALITY_LABELS[name] || name,

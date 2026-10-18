@@ -6,7 +6,7 @@
  */
 
 import { coverUrl, fetchFavorites, formatCount, formatDate } from '../api.js';
-import { createFeed, lede, workCard } from '../cards.js';
+import { lede, pageFromQuery, renderPagedFeed, workCard } from '../cards.js';
 import router from '../router.js';
 import {
   clearHistory,
@@ -181,19 +181,20 @@ function favoritesView(ctx) {
       return;
     }
 
-    feed = createFeed({
+    const feed = await renderPagedFeed({
+      page: pageFromQuery(ctx.query),
       kind: media.type,
-      limit: 32,
+      hrefFor: (target) => `#/library/favorites?kind=${media.id}&page=${target + 1}`,
       emptyTitle: '收藏夹空了',
       emptyMessage: '在作品页点一下收藏，这里就会出现。',
       render: (item) => workCard(item, media.type),
-      fetchPage: async (page, limit) => {
-        if (page === 0) return { results: items, count: total };
-        const data = await fetchFavorites(media.id, { page, limit });
+      fetchPage: async (target, limit) => {
+        if (target === 0) return { results: items, count: total, limit };
+        const data = await fetchFavorites(media.id, { page: target, limit });
         return { results: favoriteItems(data), count: favoriteCount(data, total) };
       }
     });
-    host.replaceChildren(feed.element);
+    host.replaceChildren(feed);
   }
 
   boot();

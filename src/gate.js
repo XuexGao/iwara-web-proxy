@@ -202,46 +202,119 @@ function gateHtml(siteName) {
 <title>需要访问密码 · ${name}</title>
 <meta name="robots" content="noindex" />
 <style>
-  :root { color-scheme: dark; }
+  /* 两套配色，跟随系统偏好。登录页在 Worker 里生成，
+     拿不到主站的 localStorage，所以只能用 prefers-color-scheme。 */
+  :root {
+    color-scheme: dark;
+    --bg: #100d16;
+    --surface: #171326;
+    --line: #322a49;
+    --text: #efe9f5;
+    --text-dim: #b9b0c9;
+    --text-faint: #7c7392;
+    --accent: #ff4e7c;
+    --accent-deep: #d63a63;
+    --danger-bg: rgba(255, 78, 124, 0.14);
+    --danger-line: rgba(255, 78, 124, 0.5);
+    --danger-text: #ffc2d0;
+    --glow-a: rgba(255, 78, 124, 0.12);
+    --glow-b: rgba(116, 216, 194, 0.08);
+    --input-bg: #100d16;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      color-scheme: light;
+      --bg: #f6f2ec;
+      --surface: #fffdfa;
+      --line: #d8cec0;
+      --text: #1f1a15;
+      --text-dim: #4c433a;
+      --text-faint: #857a6c;
+      --accent: #c92a52;
+      --accent-deep: #a3153c;
+      --danger-bg: rgba(201, 42, 82, 0.1);
+      --danger-line: rgba(201, 42, 82, 0.42);
+      --danger-text: #a3153c;
+      --glow-a: rgba(201, 42, 82, 0.07);
+      --glow-b: rgba(28, 127, 109, 0.05);
+      --input-bg: #fffdfa;
+    }
+  }
+
   * { box-sizing: border-box; }
+
   body {
-    margin: 0; min-height: 100vh; display: grid; place-items: center;
-    padding: 24px; background: #100d16; color: #efe9f5;
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--text);
     font-family: system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
     background-image:
-      radial-gradient(900px 520px at 80% -10%, rgba(255,78,124,.12), transparent 62%),
-      radial-gradient(700px 420px at 8% 6%, rgba(116,216,194,.08), transparent 58%);
+      radial-gradient(900px 520px at 80% -10%, var(--glow-a), transparent 62%),
+      radial-gradient(700px 420px at 8% 6%, var(--glow-b), transparent 58%);
   }
+
   .card {
-    width: min(400px, 100%); padding: 30px 28px 26px;
-    background: #171326; border: 1px solid #322a49; border-radius: 16px;
-    box-shadow: 0 24px 60px -30px rgba(0,0,0,.95);
+    width: min(400px, 100%);
+    padding: 30px 28px 26px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.5);
   }
-  .mark { font-size: 22px; font-weight: 600; letter-spacing: -.02em; margin-bottom: 4px; }
-  .mark i { color: #ff4e7c; font-style: normal; }
-  .sub { font-size: 12px; letter-spacing: .3em; color: #7c7392; margin-bottom: 22px; }
+
+  .mark { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px; }
+  .mark i { color: var(--accent); font-style: normal; }
+  .sub { font-size: 12px; letter-spacing: 0.3em; color: var(--text-faint); margin-bottom: 22px; }
   h1 { margin: 0 0 8px; font-size: 17px; font-weight: 500; }
-  p { margin: 0 0 20px; font-size: 13px; line-height: 1.7; color: #b9b0c9; }
-  label { display: block; margin-bottom: 8px; font-size: 13px; color: #b9b0c9; }
+  p { margin: 0 0 20px; font-size: 13px; line-height: 1.7; color: var(--text-dim); }
+  label { display: block; margin-bottom: 8px; font-size: 13px; color: var(--text-dim); }
+
   input {
-    width: 100%; height: 44px; padding: 0 14px; margin-bottom: 14px;
-    background: #100d16; color: #efe9f5; font-size: 15px;
-    border: 1px solid #322a49; border-radius: 8px; outline: none;
+    width: 100%;
+    height: 44px;
+    padding: 0 14px;
+    margin-bottom: 14px;
+    background: var(--input-bg);
+    color: var(--text);
+    font-size: 15px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    outline: none;
   }
-  input:focus { border-color: #ff4e7c; }
+
+  input:focus { border-color: var(--accent); }
+
   button {
-    width: 100%; height: 44px; border: 0; border-radius: 8px;
-    background: #ff4e7c; color: #fff; font-size: 15px; font-weight: 500;
+    width: 100%;
+    height: 44px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 500;
     cursor: pointer;
   }
-  button:disabled { opacity: .55; cursor: not-allowed; }
-  button:active { background: #d63a63; }
+
+  button:disabled { opacity: 0.55; cursor: not-allowed; }
+  button:active { background: var(--accent-deep); }
+
   .err {
-    padding: 10px 13px; margin-bottom: 14px; font-size: 13px;
-    background: rgba(255,78,124,.14); border: 1px solid rgba(255,78,124,.5);
-    border-radius: 8px; color: #ffc2d0;
+    padding: 10px 13px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-line);
+    border-radius: 8px;
+    color: var(--danger-text);
   }
-  .foot { margin-top: 18px; font-size: 12px; color: #7c7392; line-height: 1.7; }
+
+  .foot { margin-top: 18px; font-size: 12px; color: var(--text-faint); line-height: 1.7; }
 </style>
 </head>
 <body>

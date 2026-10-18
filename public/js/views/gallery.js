@@ -19,7 +19,16 @@ import {
   playlistCoverUrl,
   postComment
 } from '../api.js';
-import { commentNode, createFeed, lede, playlistCard, tagRow, userLink, workCard } from '../cards.js';
+import {
+  commentNode,
+  lede,
+  pageFromQuery,
+  playlistCard,
+  renderPagedFeed,
+  tagRow,
+  userLink,
+  workCard
+} from '../cards.js';
 import { getSession, getSetting, ratingParam, recordHistory } from '../store.js';
 import { icon, stateBlock, tpl, toast, toastError } from '../ui.js';
 
@@ -28,13 +37,6 @@ import { icon, stateBlock, tpl, toast, toastError } from '../ui.js';
  * ------------------------------------------------------------------ */
 
 export async function renderImages(ctx) {
-  const head = lede({
-    eyebrow: 'GALLERY',
-    title: '图库',
-    desc: '画师上传的插画与漫画。点进去可以逐张看原图。'
-  });
-
-
   const sorts = [
     { id: 'trending', label: '本周热门' },
     { id: 'date', label: '最新发布' },
@@ -44,6 +46,14 @@ export async function renderImages(ctx) {
   let sort = ctx.query.get('sort') || 'trending';
   if (!sorts.some((item) => item.id === sort)) sort = 'trending';
 
+  const page = pageFromQuery(ctx.query);
+
+  const head = lede({
+    eyebrow: 'GALLERY',
+    title: '图库',
+    desc: '画师上传的插画与漫画。点进去可以逐张看原图。'
+  });
+
   const chips = tpl`<div class="chips chips--scroll"></div>`;
   for (const option of sorts) {
     chips.append(
@@ -51,19 +61,17 @@ export async function renderImages(ctx) {
     );
   }
 
-  const feed = createFeed({
+  const feed = await renderPagedFeed({
+    page,
     kind: 'image',
-    limit: 32,
+    hrefFor: (target) => `#/images?sort=${sort}&page=${target + 1}`,
     emptyTitle: '图库是空的',
-    emptyMessage: '换个排序看看，或者把 R18 开关打开。',
-    fetchPage: async (page, limit) => {
-      const data = await fetchImages({ page, limit, sort, rating: ratingParam() });
-      return data;
-    }
+    emptyMessage: '换个排序看看，或者在设置里打开 R18 内容。',
+    fetchPage: (target, limit) =>
+      fetchImages({ page: target, limit, sort, rating: ratingParam() })
   });
-  ctx.onCleanup(() => feed.stop());
 
-  return tpl`<div>${head}${chips}${feed.element}</div>`;
+  return tpl`<div>${head}${chips}<div style="margin-top:18px">${feed}</div></div>`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -313,29 +321,29 @@ function mountComments(ctx, container, type, id) {
  * ------------------------------------------------------------------ */
 
 export async function renderPlaylists(ctx) {
+  const page = pageFromQuery(ctx.query);
+
   const head = lede({
     eyebrow: 'PLAYLIST',
     title: '播放列表',
     desc: '作者自己整理的合集，通常围绕一个系列或一个题材。'
   });
 
-  const feed = createFeed({
-    limit: 32,
+  const feed = await renderPagedFeed({
+    page,
+    hrefFor: (target) => `#/playlists?page=${target + 1}`,
     render: (item) => playlistCard(item),
     emptyTitle: '还没有公开的播放列表',
     emptyMessage: '换一页看看，或者从作者页进入他们自己的合集。',
-    fetchPage: async (page, limit) => {
-      const data = await fetchPlaylists({ page, limit });
-      return data;
-    }
+    fetchPage: (target, limit) => fetchPlaylists({ page: target, limit })
   });
-  ctx.onCleanup(() => feed.stop());
 
-  return tpl`<div>${head}${feed.element}</div>`;
+  return tpl`<div>${head}<div style="margin-top:18px">${feed}</div></div>`;
 }
 
 export async function renderPlaylist(ctx, { id }) {
-  const detail = await fetchPlaylist(id, { page: 0, limit: 50 });
+  const page = pageFromQuery(ctx.query);
+  const detail = await fetchPlaylist(id, { page: 0, limit: 1 });
   const playlist = detail?.playlist || detail;
   if (!playlist?.id) {
     return stateBlock({ title: '找不到这个播放列表', message: '它可能已经被删除或设为私有。' });
@@ -358,13 +366,14 @@ export async function renderPlaylist(ctx, { id }) {
       </div>
     </div>`;
 
-  const feed = createFeed({
-    limit: 50,
+  const feed = await renderPagedFeed({
+    page,
+    hrefFor: (target) => `#/playlist/${id}?page=${target + 1}`,
     render: (item) => workCard(item, item.numImages !== undefined && !item.file ? 'image' : 'video'),
     emptyTitle: '这个播放列表是空的',
     emptyMessage: '作者可能还没有往里加作品。',
-    fetchPage: async (page, limit) => {
-      const data = await fetchPlaylist(id, { page, limit });
+    fetchPage: async (target, limit) => {
+      const data = await fetchPlaylist(id, { page: target, limit });
       return {
         results: Array.isArray(data?.results) ? data.results : [],
         count: data?.count,
@@ -372,7 +381,7 @@ export async function renderPlaylist(ctx, { id }) {
       };
     }
   });
-  ctx.onCleanup(() => feed.stop());
 
-  return tpl`<div>${head}${cover}${feed.element}</div>`;
+
+  return tpl`<div>${head}${cover}${feed}</div>`;
 }

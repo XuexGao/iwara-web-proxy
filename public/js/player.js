@@ -183,18 +183,43 @@ export function createPlayer(options) {
 
   toggleButton.addEventListener('click', toggle);
 
-  /* ---------------- 手势：单击暂停 / 双击全屏 / 长按 2 倍速 ----------------
-     双击判定必须自己做延时等待：原生 dblclick 和 click 一起用的话，
-     第一次点击会立刻触发暂停，两次连点的结果就变成了「暂停又播放」。
-     所以这里用 260ms 的等待窗口区分单击与双击。 */
+  /* ---------------- 手势 ----------------
+     桌面与移动的约定不同，必须分开：
 
-  const DOUBLE_CLICK_DELAY = 260;
+     桌面  单击 = 暂停/继续   双击 = 全屏     长按 = 2 倍速
+     移动  单击 = 显隐控制栏  双击 = 暂停/继续 长按 = 2 倍速
+
+     移动端之所以单击不暂停：手指点一下就想暂停是最容易误触的设计，
+     主流播放器（YouTube / B 站 / 抖音）都是单击唤起控件、双击才暂停。
+     另外「双击退出视频」不是这里实现的——那是浏览器把双击当成了返回手势，
+     所以移动端双击同时做 preventDefault，避免触发浏览器的翻页/返回。
+
+     双击判定必须自己做延时窗口：原生 click 与 dblclick 一起绑定时，
+     第一次点击会立刻触发单击动作，连点就变成「两次单击」。
+  ---------------- */
+
+  // 双击判定窗口。桌面用原生双击的手感（250ms 左右）；
+  // 手机上两根手指落下的间隔普遍在 300–400ms，窗口太窄会把双击拆成两次单击，
+  // 表现就是"双击没反应"。
+  const DOUBLE_CLICK_DELAY = 300;
+  const DOUBLE_CLICK_DELAY_TOUCH = 450;
   const LONG_PRESS_DELAY = 320;
+  const MOVE_TOLERANCE = 12;
+
   let clickTimer = 0;
   let pressTimer = 0;
   let longPressing = false;
   let pressedAt = 0;
   let startPoint = null;
+  let controlsPinned = false;
+  let visibilityAtPress = true;
+  // 用户主动点了隐藏：鼠标移动不该再唤醒控制栏。
+  let userHiddenControls = false;
+  // 用户第一次碰画面之前不自动隐藏：刚进页面控制栏就消失会让人以为播放器坏了。
+  let userInteracted = false;
+
+  const isTouchDevice = () =>
+    window.matchMedia('(hover: none)').matches || navigator.maxTouchPoints > 0;
 
   function showGestureBadge(text) {
     let badge = element.querySelector('.player__gesture');
@@ -225,13 +250,39 @@ export function createPlayer(options) {
     showGestureBadge('恢复正常速度');
   }
 
+  /**
+   * 单击画面：切换控制栏显隐。
+   *
+   * 两端都用这一套（不只是移动端）：
+   * - 显示 → 取消自动隐藏，并把用户"钉住"的意愿记下来；
+   * - 隐藏 → 立刻淡出，并清掉自动隐藏定时器，避免 2.6 秒后又自己冒出来。
+   *
+   * 必须在 pointerdown 的 wake() 之后执行：wake 会无条件显示控制栏，
+   * 所以这里要基于"切换后"的状态来决定，不能依赖点击前的状态。
+   */
+  function setControlsVisible(visible) {
+    clearTimeout(hideTimer);
+    element.classList.toggle('is-hidden-controls', !visible);
+    element.classList.toggle('is-controls-pinned', visible);
+    controlsPinned = visible;
+    // 记录"这是用户主动隐藏的"，避免鼠标移动把它唤醒。
+    userHiddenControls = !visible;
+  }
+
+  function toggleControls() {
+    setControlsVisible(element.classList.contains('is-hidden-controls'));
+  }
+
   const onPointerDown = (event) => {
-    // 只处理主键/单指，且不要在进度条、按钮、清晰度面板上误触发
     if (event.button !== undefined && event.button !== 0) return;
     if (event.target instanceof Element && event.target.closest('.player__controls, .quality')) return;
 
     pressedAt = Date.now();
     startPoint = { x: event.clientX, y: event.clientY };
+    // 记下点击前的显隐状态：中间可能被自动隐藏或 wake 改动，
+    // 到 pointerup 时再读就不准了。
+    visibilityAtPress = !element.classList.contains('is-hidden-controls');
+    userInteracted = true;
     clearTimeout(pressTimer);
     pressTimer = setTimeout(startBoost, LONG_PRESS_DELAY);
   };
@@ -239,8 +290,9 @@ export function createPlayer(options) {
   const onPointerMove = (event) => {
     if (!startPoint) return;
     const moved =
-      Math.abs(event.clientX - startPoint.x) > 12 || Math.abs(event.clientY - startPoint.y) > 12;
-    // 手指在屏幕上滑动（想拖进度）时不该被当成"长按"
+      Math.abs(event.clientX - startPoint.x) > MOVE_TOLERANCE ||
+      Math.abs(event.clientY - startPoint.y) > MOVE_TOLERANCE;
+    // 手指滑动（想拖进度）时不该被当成"长按"
     if (moved) {
       clearTimeout(pressTimer);
       if (longPressing) stopBoost();
@@ -258,21 +310,37 @@ export function createPlayer(options) {
       stopBoost();
       return;
     }
-    // 按住太久但没进入加速（例如刚好卡在阈值上），也不当作点击
+    // 按住太久但没进入加速（刚好卡在阈值上），也不当作点击
     if (elapsed > LONG_PRESS_DELAY + 120) return;
     if (event.target instanceof Element && event.target.closest('.player__controls, .quality')) return;
 
-    // 双击窗口：等一小会儿看有没有第二次点击
+    const touch = isTouchDevice();
+
+    // 第二次点击 = 双击
     if (clickTimer) {
       clearTimeout(clickTimer);
       clickTimer = 0;
-      toggleFullscreen();
+      // 双击：移动端暂停/继续，桌面全屏。
+      if (touch) {
+        event.preventDefault();
+        toggle();
+      } else {
+        toggleFullscreen();
+      }
       return;
     }
-    clickTimer = setTimeout(() => {
-      clickTimer = 0;
-      toggle();
-    }, DOUBLE_CLICK_DELAY);
+
+    // 单击：两端都是显隐控制栏。暂停/继续交给双击与播放按钮。
+    const target = !visibilityAtPress;
+    clickTimer = setTimeout(
+      () => {
+        clickTimer = 0;
+        setControlsVisible(target);
+        // 手动显示后重新开始自动隐藏计时；手动隐藏则保持隐藏。
+        if (target) scheduleHide();
+      },
+      touch ? DOUBLE_CLICK_DELAY_TOUCH : DOUBLE_CLICK_DELAY
+    );
   };
 
   hit.addEventListener('pointerdown', onPointerDown);
@@ -288,7 +356,12 @@ export function createPlayer(options) {
     clearTimeout(pressTimer);
     if (longPressing) stopBoost();
   });
-  // 长按可能选中文字/触发右键菜单，一并拦住
+
+  // 移动端点一下画面不该被当成"长按选文字"，双击也不该缩放/返回。
+  hit.addEventListener('touchstart', (event) => {
+    if (event.touches.length > 1) return;
+  }, { passive: true });
+  hit.addEventListener('dblclick', (event) => event.preventDefault());
   hit.addEventListener('contextmenu', (event) => event.preventDefault());
 
   muteButton.addEventListener('click', () => {
@@ -325,24 +398,39 @@ export function createPlayer(options) {
 
   scrub.addEventListener('pointerdown', (event) => {
     scrubbing = true;
+    // 拖动开始量一次，拖动过程中不再重复测量。
+    scrubRect = scrub.getBoundingClientRect();
     scrub.setPointerCapture(event.pointerId);
     seekToRatio(ratioFromEvent(event));
   });
-  scrub.addEventListener('pointermove', (event) => {
-    const ratio = ratioFromEvent(event);
+  /* 拖动时的性能要点：
+     1. 不要在 pointermove 里反复 getBoundingClientRect（会强制同步布局，
+        每秒几百次必然掉帧）。开始拖动时量一次，缓存起来。
+     2. 用一个 rAF 合并多次 pointermove，一帧只改一次样式。 */
+  let scrubRect = null;
+  let pendingRatio = null;
+  let rafId = 0;
+
+  function flushScrub() {
+    rafId = 0;
+    if (pendingRatio === null) return;
+    const ratio = pendingRatio;
+    pendingRatio = null;
     if (scrubbing) seekToRatio(ratio);
-    // 悬停预览
-    if (preview?.url) {
+
+    if (preview?.url && scrubRect) {
       const width = peek.offsetWidth || 168;
-      const rect = scrub.getBoundingClientRect();
       const stageRect = stage.getBoundingClientRect();
-      const x = Math.min(Math.max(event.clientX - stageRect.left - width / 2, 6), stageRect.width - width - 6);
-      peek.style.left = `${x}px`;
+      const x = Math.min(
+        Math.max(scrubRect.left - stageRect.left + scrubRect.width * ratio - width / 2, 6),
+        stageRect.width - width - 6
+      );
+      peek.style.transform = `translate3d(${Math.round(x)}px, 0, 0)`;
+      peek.style.left = '0';
       peek.classList.add('is-on');
       peek.querySelector('span').textContent = formatDuration(ratio * (video.duration || 0));
       const peekVideo = peek.querySelector('video');
       if (peekVideo?.duration) {
-        // 预览片段与正片时长不同，按比例映射，只作画面参考。
         try {
           peekVideo.currentTime = ratio * peekVideo.duration;
         } catch {
@@ -350,9 +438,24 @@ export function createPlayer(options) {
         }
       }
     }
+  }
+
+  scrub.addEventListener('pointermove', (event) => {
+    if (!scrubRect) scrubRect = scrub.getBoundingClientRect();
+    pendingRatio = Math.min(
+      1,
+      Math.max(0, (event.clientX - scrubRect.left) / (scrubRect.width || 1))
+    );
+    if (!rafId) rafId = requestAnimationFrame(flushScrub);
   });
   const endScrub = () => {
     scrubbing = false;
+    scrubRect = null;
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+    }
+    pendingRatio = null;
   };
   scrub.addEventListener('pointerup', endScrub);
   scrub.addEventListener('pointercancel', endScrub);
@@ -409,7 +512,7 @@ export function createPlayer(options) {
     updateToggleIcon();
     playback.video = video;
     element.classList.remove('is-paused');
-    scheduleHide();
+    if (userInteracted) scheduleHide();
   });
   video.addEventListener('pause', () => {
     updateToggleIcon();
@@ -485,22 +588,58 @@ export function createPlayer(options) {
 
   function scheduleHide() {
     clearTimeout(hideTimer);
+    if (!userInteracted) return;
     hideTimer = setTimeout(() => {
-      if (!video.paused) element.classList.add('is-hidden-controls');
+      if (!video.paused && !controlsPinned) element.classList.add('is-hidden-controls');
     }, 2600);
   }
 
+  // 鼠标移动时临时唤出控制栏。单击由 toggleControls 负责真显隐，
+  // 这里不能无条件显示，否则"再次单击隐藏"会立刻被下一帧的 pointermove 推翻。
+  /**
+   * 鼠标在画面上移动时临时唤出控制栏。
+   *
+   * 关键：用户用单击主动隐藏之后（controlsPinned === false 且 userInteracted），
+   * 不能再因为 mouseover 把它唤醒——否则"单击隐藏"会在下一帧被 pointermove
+   * 推翻，表现为点了没反应。所以这里只处理"自动隐藏"状态下的唤醒，
+   * 主动隐藏后必须再点一次才回来。
+   */
   const wake = () => {
+    if (userHiddenControls) return;
     element.classList.remove('is-hidden-controls');
     if (!video.paused) scheduleHide();
   };
 
   stage.addEventListener('pointermove', wake);
-  stage.addEventListener('pointerdown', wake);
+  stage.addEventListener('pointerdown', () => {
+    // 点画面时清掉自动隐藏，把是否显示完全交给 toggleControls。
+    clearTimeout(hideTimer);
+  });
   element.addEventListener('focusin', () => clearTimeout(hideTimer));
   element.addEventListener('focusout', () => {
     if (!video.paused) scheduleHide();
   });
+
+  /* ---------------- 全屏 ---------------- */
+
+  // 全屏时元素本身是全屏的，控制栏必须仍在它内部（stage 是 .player 的子级），
+  // 所以只需保证全屏切换后控制栏可交互、不被 is-hidden-controls 卡住。
+  const onFullscreenChange = () => {
+    const isFull = !!document.fullscreenElement;
+    element.classList.toggle('is-fullscreen', isFull);
+    if (isFull) {
+      // 进全屏时先把控制栏亮出来，让用户知道可以点。
+      element.classList.remove('is-hidden-controls');
+      controlsPinned = false;
+      element.classList.remove('is-controls-pinned');
+      clearTimeout(hideTimer);
+      scheduleHide();
+    } else {
+      element.classList.remove('is-hidden-controls');
+      clearTimeout(hideTimer);
+    }
+  };
+  document.addEventListener('fullscreenchange', onFullscreenChange);
 
   /* ---------------- 键盘 ---------------- */
 
@@ -568,6 +707,7 @@ export function createPlayer(options) {
     meta,
     destroy({ keepVideo = false } = {}) {
       clearTimeout(hideTimer);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
       document.removeEventListener('keydown', onKeydown);
       if (!keepVideo) {
         video.pause();

@@ -92,7 +92,16 @@ X-Version = sha1("<uuid>_<expires>_<盐值>")
 分片主机名是随机的（`kafka` / `robin` / `zani` / `acheron` …），
 所以 `/media/v?u=` 必须接受任意 `*.iwara.tv`，但会校验主机后缀防止变成任意站点代理。
 
-### 3. 封面帧地址
+### 3. 下载文件名
+
+上游给的下载文件名是 `<uuid>_Source.mp4`，下下来认不出是什么，所以
+`src/sources.js` 用**作品标题**重命名（`safeFileBase()`：清洗非法字符、
+压空白、截断到 80 字）。非原画档追加清晰度后缀。
+
+`src/media.js` 的 `buildContentDisposition()` 同时输出 ASCII 兜底与
+RFC 5987 的 `filename*`，否则中文标题在 Safari / 老版 Chrome 上会乱码。
+
+### 4. 封面帧地址
 
 **这一条最容易踩坑。** 视频封面的真实地址是：
 
@@ -145,15 +154,60 @@ iconNode('play')  // 返回真实 DOM 节点，用于 replaceChildren/append
 
 把 `icon()` 的结果塞进 `replaceChildren` 会渲染成 `[object Object]`。
 
-### 播放器手势
+### 播放器手势（桌面与移动不同）
 
-`player.js` 里手势是自己实现的分发，不用原生 `click` + `dblclick`：
+`player.js` 里手势是自己实现的分发，不用原生 `click` + `dblclick`。
+两端约定**必须分开**，用 `(hover: none)` / `maxTouchPoints` 判定：
 
-- **单击** 暂停/继续，**双击** 全屏，**长按**（320ms）2 倍速。
+| 操作 | 桌面 | 移动 |
+| :-- | :-- | :-- |
+| 单击 | 显隐控制栏 | 显隐控制栏 |
+| 双击 | 全屏 | 暂停 / 继续 |
+| 长按 320ms | 2 倍速 | 2 倍速 |
+
+单击统一是「显隐控制栏」：手指点一下就想暂停是最容易误触的设计，
+主流播放器（YouTube / B 站 / 抖音）也都是单击唤起控件。
+暂停/继续交给双击与播放按钮。移动端双击要 `preventDefault`，否则会被当成返回手势。
+
+**控制栏显隐的三个陷阱**（都踩过）：
+1. `wake()`（pointermove 唤起）会覆盖单击的隐藏结果——用户点完鼠标就停在画面上，
+   hover 一直成立。所以要用 `userHiddenControls` 标记「用户主动隐藏」，
+   主动隐藏后只能再点一次才回来，鼠标移动不能唤醒。
+2. `.player.is-paused .player__controls { opacity: 1 }` 与隐藏规则优先级相同，
+   后写的赢。必须显式写 `.is-paused.is-hidden-controls`。
+3. 双击判定窗口在触摸设备上要放宽到 450ms：真实手机上两次 tap 间隔常到
+   400ms 以上，260ms 会被拆成两次单击，表现就是「双击没反应」。
+
+其他要点：
 - 双击判定必须自己做延时窗口（260ms）：原生 `click` 与 `dblclick` 同时绑定时，
-  第一次点击会立刻触发暂停，两次连点的结果变成「暂停又播放」。
-- 长按阈值内如果指针移动超过 12px（想拖进度条），取消长按判定。
+  第一次点击会立刻触发单击动作，连点就变成「两次单击」。
+- 长按阈值内指针移动超过 12px（想拖进度条）则取消长按。
 - 画中画失败要给出原因：iOS Safari 根本不支持网页画中画，静默失败最像 bug。
+
+### 关系列表的数据形状
+
+`/user/{id}/followers` 与 `/following` **不是裸用户数组**：
+
+```
+followers: { id, createdAt, follower: { name, username, avatar, ... } }
+following: { id, createdAt, user:     { name, username, avatar, ... } }
+```
+
+直接渲染外层会得到一堆「匿名」。前端用 `item.follower || item.user || item` 取。
+（Iwara 客户端显示正常，是因为它取的就是内层。）
+
+### 分页
+
+列表统一用 `renderPagedFeed()`（`cards.js`），**不是无限滚动**：
+
+- 每页 `PAGE_SIZE = 30`。
+- 页码写在地址里（`?page=2`），刷新和分享都能回到同一页。
+- 切页后 `router` 会把页面滚回顶部（见 `scrollToTop()`：要连做三次，
+  只调一次 `scrollTo(0,0)` 会被浏览器的滚动恢复抵消）。
+- 渲染期间 `main` 会加 `.is-loading`（变淡 + 禁用点击），
+  否则点了翻页之后界面纹丝不动，看起来像没反应。
+- 首屏骨架屏**必须放进 `.grid` 内部**：放进 `.loadmore`（`place-items:center`）
+  会被压成单列。
 
 ### 样式
 
@@ -180,7 +234,11 @@ iconNode('play')  // 返回真实 DOM 节点，用于 replaceChildren/append
 npm test               # 31 项后端集成（打真实 Iwara）
 npm run test:gate      # 26 项站点访问密码
 npm run test:routes    # 23 项路由冒烟：逐页确认没有白屏
-npm run test:player    # 12 项播放器手势（单击/双击/长按/画中画/键盘）
+npm run test:player    # 12 项桌面播放器手势（单击/双击/长按/画中画/键盘）
+npm run test:mobile    # 13 项移动端手势（单击显隐控件、双击暂停）
+npm run test:page      # 17 项分页（每页 30、翻页回顶、刷新保持）
+npm run test:download  # 12 项下载文件名（含 RFC 5987 中文编码）
+npm run test:linkify   # 13 项 linkify（防 [object Object] 回归）
 npm run test:theme     # 7 项主题持久化与首帧无闪烁
 npm run test:ui        # 播放器、悬停预览、迷你播放器
 npm run check          # import 具名导出一致性
@@ -226,6 +284,9 @@ SITE_PASSWORD='@Gao123456' node dev-server.mjs
    需要在首帧前跑的东西必须独立成文件，参考 `theme-init.js`。
 8. **`wrangler.jsonc` 的 `vars` 与 `secret` 不能同名**，否则 `secret put` 报
    `Binding name already in use`。
+9. **`linkify()` 返回的是 raw 包装，不是节点。** 直接 `append(linkify(...))`
+   会渲染成 `[object Object]`（论坛回复就这么坏过）。要节点请用 `linkifyNode()`。
+10. **骨架屏别放进 `.loadmore`。** 那里的 `place-items:center` 会把网格压成单列。
 
 ---
 

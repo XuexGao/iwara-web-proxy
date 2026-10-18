@@ -16,7 +16,12 @@
     "shots": "node tools/shot.mjs",
     "test:ui": "node test/frontend.smoke.mjs",
     "test:routes": "node test/routes.smoke.mjs",
-    "check": "node tools/check-imports.mjs"
+    "check": "node tools/check-imports.mjs",
+    "test:page": "node test/pagination.test.mjs",
+    "test:mobile": "node test/mobile-gestures.test.mjs",
+    "test:download": "node test/download.test.mjs",
+    "test:linkify": "node test/linkify.test.mjs",
+    "test:relations": "node test/relations.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.126.0"

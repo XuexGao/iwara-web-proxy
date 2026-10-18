@@ -8,7 +8,7 @@
  */
 
 import { fetchImages, fetchVideos, formatCount } from '../api.js';
-import { createFeed, lede, userLink } from '../cards.js';
+import { lede, pageFromQuery, renderPagedFeed, userLink } from '../cards.js';
 import router from '../router.js';
 import { getSession, getSetting, ratingParam } from '../store.js';
 import { SORT_OPTIONS, icon, stateBlock, tpl } from '../ui.js';
@@ -89,37 +89,27 @@ export async function renderSubscriptions(ctx) {
     );
   }
 
-  const feedHost = tpl`<div></div>`;
+  const page = pageFromQuery(ctx.query);
 
-  function buildFeed() {
-    return createFeed({
-      kind: kind === 'images' ? 'image' : 'video',
-      limit: 32,
-      emptyTitle: '订阅里还什么都没有',
-      emptyMessage:
-        '可能你还没有关注任何作者，或者关注的作者最近没发新东西。去作品页点作者头像，进主页就能关注。',
-      fetchPage: async (page, limit) => {
-        const params = {
-          subscribed: 'true',
-          page,
-          limit,
-          sort,
-          rating: ratingParam()
-        };
-        const data =
-          kind === 'images' ? await fetchImages(params) : await fetchVideos(params);
-        return data;
-      }
-    });
-  }
-
-  let feed = buildFeed();
-  feedHost.replaceChildren(feed.element);
-  ctx.onCleanup(() => feed.stop());
-
-  // 订阅为空时顺手列出你关注的人，方便直接点进去
-  const followingStrip = tpl`<div></div>`;
-  loadFollowingStrip(followingStrip, ctx);
+  const feed = await renderPagedFeed({
+    page,
+    kind: kind === 'images' ? 'image' : 'video',
+    hrefFor: (target) =>
+      `#/subscriptions?kind=${kind}&sort=${sort}&page=${target + 1}`,
+    emptyTitle: '订阅里还什么都没有',
+    emptyMessage:
+      '可能你还没有关注任何作者，或者关注的作者最近没发新东西。去作品页点作者头像，进主页就能关注。',
+    fetchPage: async (target, limit) => {
+      const params = {
+        subscribed: 'true',
+        page: target,
+        limit,
+        sort,
+        rating: ratingParam()
+      };
+      return kind === 'images' ? fetchImages(params) : fetchVideos(params);
+    }
+  });
 
   const footer = tpl`
     <p class="desc" style="margin-top:24px">
@@ -127,37 +117,5 @@ export async function renderSubscriptions(ctx) {
       <a href="#/" style="color:var(--celadon)">回首页看看</a>
     </p>`;
 
-  return tpl`<div>${head}${kindChips}${sortChips}${feedHost}${followingStrip}${footer}</div>`;
-}
-
-/** 底部横条：你关注的作者，点进去可直接看其主页。 */
-async function loadFollowingStrip(host, ctx) {
-  const session = getSession();
-  const userId = session.user?.id;
-  if (!userId) return;
-
-  try {
-    const { fetchFollowing } = await import('../api.js');
-    const data = await fetchFollowing(userId, { page: 0, limit: 18 });
-    if (ctx.signal.aborted) return;
-    const results = Array.isArray(data?.results) ? data.results : [];
-    if (!results.length) return;
-
-    const strip = tpl`
-      <div class="panel">
-        <div class="panel__title">你关注的作者</div>
-      </div>`;
-    const row = tpl`<div class="chips chips--scroll"></div>`;
-    for (const user of results) {
-      const href = userLink(user);
-      if (!href) continue;
-      row.append(
-        tpl`<a class="chip" href="${href}">${icon('user')}<span>${user.name || user.username}</span></a>`
-      );
-    }
-    strip.append(row);
-    host.replaceChildren(strip);
-  } catch {
-    /* 关注列表拿不到不影响主列表 */
-  }
+  return tpl`<div>${head}${kindChips}${sortChips}<div style="margin-top:18px">${feed}</div>${footer}</div>`;
 }

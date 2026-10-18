@@ -120,12 +120,32 @@ async function proxyMedia(request, env, targetUrl, kind) {
   // 下载模式：给文件名，让浏览器直接存盘。
   const downloadName = new URL(request.url).searchParams.get('dl');
   if (downloadName) {
-    const safeName = downloadName.replace(/[\r\n"\\/]/g, '_').slice(0, 180);
-    headers.set('content-disposition', `attachment; filename="${safeName}"`);
+    headers.set('content-disposition', buildContentDisposition(downloadName));
   }
 
   const body = upstream.status === 204 || upstream.status === 304 ? null : upstream.body;
   return new Response(body, { status: upstream.status, headers });
+}
+
+/**
+ * 构造 Content-Disposition。
+ *
+ * 中文标题必须同时给 ASCII 兜底名和 RFC 5987 的 filename*，
+ * 否则部分浏览器（尤其是 Safari 与老版 Chrome）会把中文显示成乱码或直接丢弃文件名。
+ */
+function buildContentDisposition(filename) {
+  const raw = String(filename || '').replace(/[\r\n]/g, ' ').slice(0, 180);
+  const safe = raw.replace(/["\\]/g, '_');
+
+  // ASCII 兜底：非 ASCII 字符换成下划线，避免整个头非法。
+  const ascii = safe.replace(/[^\x20-\x7e]/g, '_') || 'download';
+
+  const encoded = encodeURIComponent(safe)
+    // RFC 5987 允许的字符集比 encodeURIComponent 窄，这几个要手动放开
+    .replace(/['()]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
+    .replace(/\*/g, '%2A');
+
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;
 }
 
 export async function handleMedia(request, env, url) {

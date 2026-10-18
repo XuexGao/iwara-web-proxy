@@ -108,6 +108,9 @@ async function render() {
 
   if (beforeEach) await beforeEach(ctx, matched?.params || {});
 
+  // 渲染是异步的（要等接口），先给个明确的"正在切换"状态，
+  // 否则点了翻页之后界面纹丝不动，看起来像没反应。
+  mount.classList.add('is-loading');
   document.documentElement.dataset.route = matched?.entry.pattern || '404';
   updateNavHighlight(path);
 
@@ -120,6 +123,7 @@ async function render() {
     }
   } catch (error) {
     console.error('render failed', error);
+    mount.classList.remove('is-loading');
     node = errorNode(error, () => render());
   }
 
@@ -128,12 +132,30 @@ async function render() {
     return;
   }
 
+  mount.classList.remove('is-loading');
   if (node instanceof Node) mount.replaceChildren(node);
   else mount.replaceChildren(document.createTextNode(String(node ?? '')));
 
   mount.focus({ preventScroll: true });
-  window.scrollTo(0, 0);
+  scrollToTop();
   onAfterRender?.(ctx);
+}
+
+/**
+ * 回到页面顶部。
+ *
+ * 只调一次 scrollTo(0,0) 不够：翻页时浏览器会尝试恢复它记住的滚动位置，
+ * 而且新内容还没布局完，滚动会被后续的 reflow 抵消。
+ * 所以这里连做三次（立刻 + 下一帧 + 稍后），并用 instant 避免平滑滚动打断。
+ */
+function scrollToTop() {
+  const toTop = () => window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  toTop();
+  requestAnimationFrame(() => {
+    toTop();
+    requestAnimationFrame(toTop);
+  });
+  setTimeout(toTop, 60);
 }
 
 function updateNavHighlight(path) {

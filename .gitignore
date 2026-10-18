@@ -11,3 +11,6 @@ dist/
 tools/dbg*.mjs
 tools/shots.mjs
 tools/prod-check.mjs
+
+# 截图只保留压缩后的 webp，PNG 源文件不入库
+docs/screenshots/*.png

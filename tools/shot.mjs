@@ -70,10 +70,26 @@ await shot('settings', { hash: '/#/settings', theme: 'dark', wait: '.switch' });
 await shot('gallery', { hash: '/#/images', theme: 'dark', wait: '.card' });
 await shot('home-light', { hash: '/', theme: 'light', wait: '.card' });
 
-/* 播放页：等视频真的解码出画面 */
-await page.goto(`${BASE}/#/`, { waitUntil: 'commit' });
-await waitFor(page, async () => (await page.locator('.card__title').count()) > 0, 40000);
-const href = await page.locator('.card__title').first().getAttribute('href');
+/* 播放页
+   固定用一个清晰度清单完整的作品：首页推荐的第一个可能刚好还在转码，
+   拍出来会是"暂时无法播放"的空状态。可用 ID 通过 SHOT_VIDEO 覆盖。 */
+const SHOT_VIDEO = process.env.SHOT_VIDEO || '8h9advbso9KH3A';
+let href = `#/video/${SHOT_VIDEO}`;
+
+// 确认它真的可播，不行就回退到首页第一个
+{
+  await page.goto(`${BASE}/${href}`, { waitUntil: 'commit', timeout: 60000 });
+  const ok = await waitFor(
+    page,
+    async () => (await page.locator('.player__stage video').count()) > 0,
+    30000
+  );
+  if (!ok) {
+    await page.goto(`${BASE}/#/`, { waitUntil: 'commit' });
+    await waitFor(page, async () => (await page.locator('.card__title').count()) > 0, 40000);
+    href = await page.locator('.card__title').first().getAttribute('href');
+  }
+}
 
 if (href) {
   for (const [name, theme] of [
@@ -102,9 +118,32 @@ if (href) {
         v.pause();
       }
     });
-    await page.waitForTimeout(4000);
-    await page.locator('.player__stage').hover();
-    await page.waitForTimeout(900);
+    // 等右侧相关作品、作者头像、标签都渲染出来再拍，
+    // 否则截图里会出现"相关作品加载失败"这类半成品状态。
+    await waitFor(
+      page,
+      async () => (await page.locator('.rail__item').count()) > 0,
+      45000
+    );
+    await waitFor(
+      page,
+      async () =>
+        page.evaluate(() => {
+          const img = document.querySelector('.authorbar__avatar');
+          return !!img && img.naturalWidth > 0;
+        }),
+      30000
+    );
+    await waitFor(
+      page,
+      async () => (await page.locator('a.tagchip').count()) > 0,
+      25000
+    );
+    await page.waitForTimeout(2500);
+    if ((await page.locator('.player__stage').count()) > 0) {
+      await page.locator('.player__stage').hover().catch(() => {});
+      await page.waitForTimeout(900);
+    }
     const file = path.join(OUT_DIR, `${name}.png`);
     await page.screenshot({ path: file });
     console.log(`  → ${path.relative(process.cwd(), file)}`);
