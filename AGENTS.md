@@ -208,6 +208,16 @@ following: { id, createdAt, user:     { name, username, avatar, ... } }
 3. `canSearch` 要把服务端共享 Token 算进去（`session.sharedToken`），
    否则配了 `IWARA_AUTHORIZATION` 前端仍显示「需要登录」。
 
+**排序**按板块收窄（对齐参考客户端的 FilterConfig）：
+
+| 板块 | 可排序 |
+| :-- | :-- |
+| videos / images | `date`（最新）、`relevance`（相关性）、`views`（观看次数）、`likes`（点赞数） |
+| users / posts / forum | `date`、`relevance` |
+
+传上游不认的排序值**不会报错**，只会静默按默认排序，所以必须按板块过滤，
+否则用户切板块后会看到「选了观看次数但顺序没变」的假象。默认 `date`。
+
 Wrangler 部署注意：`IWARA_AUTHORIZATION` 用 `wrangler secret put` 配置，
 **不能**同时写进 `wrangler.jsonc` 的 `vars`（同名会报 `Binding name already in use`）。
 

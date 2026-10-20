@@ -1066,36 +1066,23 @@ select.input {
 .watch {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 336px;
-  /* 桌面：左列 播放/详情/评论，右列 作者/相关。
-     五个块是同级元素，手机端靠同一套 areas 换成单列顺序。 */
-  grid-template-areas:
-    'head    author'
-    'details related'
-    'comments related';
-  grid-template-rows: auto auto 1fr;
-  gap: 26px 26px;
+  gap: 26px;
   align-items: start;
 }
 
-.watch__head-block {
-  grid-area: head;
-}
-
-.watch__author {
-  grid-area: author;
-}
-
-.watch__details {
-  grid-area: details;
+/* 两栏各自成流：右栏的「作者卡」和「相关作品」自然上下紧挨，
+   不会被左栏的行高顶开（早期版本让 5 块共用网格行，作者卡下方空出约 600px）。 */
+.watch__col {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
   min-width: 0;
 }
 
+.watch__head-block,
+.watch__details,
 .watch__comments {
-  grid-area: comments;
-}
-
-.watch__related {
-  grid-area: related;
+  min-width: 0;
 }
 
 .player {
@@ -2054,6 +2041,28 @@ main.is-loading {
   transition: opacity 0.15s var(--ease);
 }
 
+/* ---------------------------------------------------------------- 搜索排序 */
+
+/* 排序是第二级筛选，与类型 chips 之间拉开距离并弱化一点，
+   避免两组胶囊看起来是同一层级。 */
+.search__sorts {
+  margin-top: -8px;
+  padding-top: 0;
+}
+
+.search__sorts .chip {
+  height: 28px;
+  padding: 0 11px;
+  font-size: 12.5px;
+  border-color: transparent;
+  background: var(--ink-1);
+}
+
+.search__sorts .chip.is-on {
+  background: var(--paper);
+  color: var(--ink);
+}
+
 /* ---------------------------------------------------------------- 分页条 */
 
 .pager {
@@ -2396,7 +2405,9 @@ main.is-loading {
   .watch {
     grid-template-columns: minmax(0, 1fr);
     /* 手机端顺序（按一路往下滑的阅读习惯）：
-       视频 → 标题 → 作者 → 作品详情 → 评论 → 相关作品 */
+       视频 → 标题 → 作者 → 作品详情 → 评论 → 相关作品
+       两栏 display:contents 后，5 块直接成为 .watch 的网格项，
+       就能用 areas 跨栏重排（作者提到详情之前、评论插在相关之前）。 */
     grid-template-areas:
       'head'
       'author'
@@ -2405,6 +2416,30 @@ main.is-loading {
       'related';
     grid-template-rows: auto;
     gap: 20px;
+  }
+
+  .watch__col {
+    display: contents;
+  }
+
+  .watch__head-block {
+    grid-area: head;
+  }
+
+  .watch__author {
+    grid-area: author;
+  }
+
+  .watch__details {
+    grid-area: details;
+  }
+
+  .watch__comments {
+    grid-area: comments;
+  }
+
+  .watch__related {
+    grid-area: related;
   }
 }
 

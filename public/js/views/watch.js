@@ -391,7 +391,29 @@ async function load(ctx, id, root, holder) {
 
   const commentsBlock = tpl`<div class="watch__comments">${commentPanel}</div>`;
 
-  const layout = tpl`<div class="watch">${headBlock}${authorPanel}${detailsBlock}${commentsBlock}${relatedPanel}</div>`;
+  /* 结构：
+       .watch
+         .watch__col--main   左栏（head / details / comments）
+         .watch__col--side   右栏（author / related）
+
+     桌面时两栏各自是正常文档流，作者卡和相关作品紧挨着；
+     如果让这 5 块直接当网格项、共用同一套行，右栏就会被左栏的行高顶开
+     ——播放器 + 标题那一行很高，导致作者卡下方空出几百像素（踩过）。
+
+     手机时给两栏加 display:contents，5 块就变成 .watch 的网格项，
+     再用 grid-template-areas 排成「视频→作者→说明→评论→相关」。 */
+  const layout = tpl`
+    <div class="watch">
+      <div class="watch__col watch__col--main">
+        ${headBlock}
+        ${detailsBlock}
+        ${commentsBlock}
+      </div>
+      <div class="watch__col watch__col--side">
+        ${authorPanel}
+        ${relatedPanel}
+      </div>
+    </div>`;
   root.replaceChildren(layout);
 
   /* ---------------- 快捷键以外的收尾 ---------------- */

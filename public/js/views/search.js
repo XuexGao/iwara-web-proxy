@@ -45,6 +45,53 @@ function normalizeType(value) {
   return TYPE_ALIASES[raw] || (TYPES.some((t) => t.id === raw) ? raw : 'videos');
 }
 
+/**
+ * 各搜索板块支持的排序方式。
+ *
+ * 取值与 Iwara 上游一致（对齐参考客户端的 FilterConfig）：
+ * - 视频 / 图库：date（最新）、relevance（相关性）、views（观看次数）、likes（点赞数）
+ * - 作者 / 帖子 / 论坛：只有 date 与 relevance
+ * 传上游不认的值不会报错，只会静默按默认排序，所以这里按板块收窄。
+ */
+const SORT_BY_TYPE = {
+  videos: [
+    { id: 'date', label: '最新' },
+    { id: 'relevance', label: '相关性' },
+    { id: 'views', label: '观看次数' },
+    { id: 'likes', label: '点赞数' }
+  ],
+  images: [
+    { id: 'date', label: '最新' },
+    { id: 'relevance', label: '相关性' },
+    { id: 'views', label: '观看次数' },
+    { id: 'likes', label: '点赞数' }
+  ],
+  users: [
+    { id: 'date', label: '最新' },
+    { id: 'relevance', label: '相关性' }
+  ],
+  posts: [
+    { id: 'date', label: '最新' },
+    { id: 'relevance', label: '相关性' }
+  ],
+  forum: [
+    { id: 'date', label: '最新' },
+    { id: 'relevance', label: '相关性' }
+  ]
+};
+
+const DEFAULT_SORT = 'date';
+
+function sortsFor(type) {
+  return SORT_BY_TYPE[type] || SORT_BY_TYPE.videos;
+}
+
+/** 归一 sort 参数：不属于该板块就退回默认值。 */
+function normalizeSort(value, type) {
+  const raw = String(value || '').trim();
+  return sortsFor(type).some((o) => o.id === raw) ? raw : DEFAULT_SORT;
+}
+
 // 键与 TYPES 的 id 一致（复数）
 const EMPTY = {
   videos: {
@@ -240,6 +287,8 @@ export async function renderSearch(ctx) {
   // 统一成上游要求的复数形式（videos / images / users / posts / forum）
   const type = normalizeType(ctx.query.get('type'));
   const typeMeta = TYPES.find((t) => t.id === type) || TYPES[0];
+  const sort = normalizeSort(ctx.query.get('sort'), type);
+  const sortLabel = sortsFor(type).find((o) => o.id === sort)?.label || '';
 
   const session = getSession();
   const inlineToken = String(getSetting('token') || '').trim();
@@ -252,7 +301,7 @@ export async function renderSearch(ctx) {
     eyebrow: 'SEARCH',
     title: query ? `“${query}”` : '搜索',
     desc: query
-      ? `正在按${typeMeta.label}搜索。`
+      ? `正在按${typeMeta.label}搜索${sortLabel ? `，按${sortLabel}排序` : ''}。`
       : '输入作品标题、作者名或标签。搜索接口在上游要求认证，未登录时用不了。'
   });
   head.append(countNode);
@@ -271,7 +320,8 @@ export async function renderSearch(ctx) {
       router.navigate('/search');
       return;
     }
-    router.navigate(`/search?q=${encodeURIComponent(value)}&type=${type}`);
+    const params = new URLSearchParams({ q: value, type, sort });
+    router.navigate(`/search?${params.toString()}`);
   };
   form.addEventListener('submit', onSubmit);
   ctx.onCleanup(() => form.removeEventListener('submit', onSubmit));
@@ -281,8 +331,22 @@ export async function renderSearch(ctx) {
     const params = new URLSearchParams();
     if (query) params.set('q', query);
     params.set('type', option.id);
+    // 切板块时带上当前排序；新板块不支持时 normalizeSort 会退回默认值
+    params.set('sort', normalizeSort(sort, option.id));
     chips.append(
       tpl`<a class="chip ${option.id === type ? 'is-on' : ''}" href="#/search?${params.toString()}">${option.label}</a>`
+    );
+  }
+
+  /* 排序 chips：只列当前板块支持的排序方式（上游对不支持的值会静默忽略） */
+  const sortChips = tpl`<div class="chips chips--scroll search__sorts"></div>`;
+  for (const option of sortsFor(type)) {
+    const params = new URLSearchParams();
+    if (query) params.set('q', query);
+    params.set('type', type);
+    params.set('sort', option.id);
+    sortChips.append(
+      tpl`<a class="chip ${option.id === sort ? 'is-on' : ''}" href="#/search?${params.toString()}">${option.label}</a>`
     );
   }
 
@@ -307,13 +371,15 @@ export async function renderSearch(ctx) {
     const feed = renderPagedFeed({
       page,
       columns: type === 'users' ? 'grid--people' : isRow ? 'rowlist' : '',
-      hrefFor: (target) =>
-        `#/search?q=${encodeURIComponent(query)}&type=${type}&page=${target + 1}`,
+      hrefFor: (target) => {
+        const params = new URLSearchParams({ q: query, type, sort, page: String(target + 1) });
+        return `#/search?${params.toString()}`;
+      },
       emptyTitle: EMPTY[type].title,
       emptyMessage: EMPTY[type].message,
       render: (item) => resultNode(item, type),
       fetchPage: async (target, limit) => {
-        const data = await search({ query, type, page: target, limit });
+        const data = await search({ query, type, sort, page: target, limit });
         if (target === 0) {
           const count = Number(data?.count);
           countNode.replaceChildren(
@@ -326,5 +392,5 @@ export async function renderSearch(ctx) {
     body.append(feed);
   }
 
-  return tpl`<div>${head}${form}${chips}${body}</div>`;
+  return tpl`<div>${head}${form}${chips}${sortChips}${body}</div>`;
 }

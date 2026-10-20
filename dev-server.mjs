@@ -66,7 +66,8 @@ const ENV = {
   DEFAULT_SITE: 'main',
   BASIC_AUTH_USER: '',
   BASIC_AUTH_PASS: '',
-  IWARA_AUTHORIZATION: '',
+  // 本地验证搜索等功能时需要共享 Token：IWARA_AUTHORIZATION=xxx node dev-server.mjs
+  IWARA_AUTHORIZATION: process.env.IWARA_AUTHORIZATION || '',
   API_CACHE_TTL: '30',
   IMAGE_CACHE_TTL: '604800',
   VIDEO_CACHE_TTL: '3600',
