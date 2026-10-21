@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#100D16"/>
-  <path d="M16 6.5c4.2 0 7.6 3.4 7.6 7.6 0 5.4-7.6 11.4-7.6 11.4S8.4 19.5 8.4 14.1C8.4 9.9 11.8 6.5 16 6.5z" fill="#FF4E7C"/>
-  <circle cx="16" cy="14" r="3.1" fill="#100D16"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="光圈与播放">
+  <rect width="32" height="32" rx="8" fill="#FBF7F2"/>
+  <circle cx="16" cy="16" r="9.2" fill="none" stroke="#FF4E7C" stroke-width="2.4"/>
+  <path d="M13.9 11.5 21.2 16l-7.3 4.5z" fill="#1A1622"/>
 </svg>
