@@ -16,7 +16,7 @@ import {
   tagLabel
 } from './api.js';
 import { attachPreview } from './cards-preview.js';
-import { icon, raw, stateBlock, tpl } from './ui.js';
+import { icon, linkifyNode, raw, stateBlock, tpl } from './ui.js';
 
 export const PAGE_SIZE = 30;
 
@@ -421,7 +421,8 @@ export function commentNode(comment, { canDelete = false } = {}) {
         <p class="comment__text"></p>
       </div>
     </article>`;
-  node.querySelector('.comment__text').textContent = comment.body || '';
+  // 评论正文是 Markdown（含 ![](url) 图片），不能直接 textContent
+  node.querySelector('.comment__text').append(linkifyNode(comment.body || ''));
   if (canDelete) {
     const button = tpl`<button class="chip" type="button" style="height:24px;padding:0 9px;font-size:12px">删除</button>`;
     button.addEventListener('click', () => comment.onDelete?.(comment));

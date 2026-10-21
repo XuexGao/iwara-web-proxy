@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="进度条与圆点">
+  <rect width="32" height="32" rx="8" fill="#100D16"/>
+  <rect x="5.5" y="14.2" width="21" height="3.6" rx="1.8" fill="#3A3346"/>
+  <rect x="5.5" y="14.2" width="11.5" height="3.6" rx="1.8" fill="#74D8C2"/>
+  <circle cx="17" cy="16" r="4.4" fill="#100D16"/>
+  <circle cx="17" cy="16" r="3.5" fill="#FF4E7C"/>
+</svg>

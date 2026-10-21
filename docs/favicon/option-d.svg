@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="菱形与光点">
+  <rect width="32" height="32" rx="8" fill="#100D16"/>
+  <path d="M16 4.8 27.2 16 16 27.2 4.8 16z" fill="#FF4E7C"/>
+  <path d="M16 9.4 22.6 16 16 22.6 9.4 16z" fill="#100D16"/>
+  <circle cx="16" cy="16" r="2.9" fill="#F2B45C"/>
+</svg>

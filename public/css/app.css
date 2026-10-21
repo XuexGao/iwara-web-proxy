@@ -1307,7 +1307,9 @@ select.input {
   border-radius: 2px;
   /* 只对高度做过渡；拖动时 played/knob 直接跟手，不加过渡。 */
   transition: height 0.14s var(--ease);
-  contain: layout paint;
+  /* 只能是 layout/style：paint containment 会把超出 4px 轨道的圆点裁掉，
+     表现为「圆点被压在进度条里」（踩过）。 */
+  contain: layout style;
 }
 
 .player__scrub:hover .player__track {
@@ -1332,11 +1334,14 @@ select.input {
 .player__knob {
   position: absolute;
   top: 50%;
-  width: 12px;
-  height: 12px;
-  margin-left: -6px;
+  z-index: 2;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
   background: #fff;
   border-radius: 50%;
+  /* 轻微投影让白点在浅色画面上也看得见 */
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
   transform: translateY(-50%) scale(0);
   transition: transform 0.14s var(--ease);
 }
@@ -1492,9 +1497,9 @@ select.input {
     height: 6px;
   }
   .player__knob {
-    width: 14px;
-    height: 14px;
-    margin-left: -7px;
+    width: 11px;
+    height: 11px;
+    margin-left: -5.5px;
     transform: translateY(-50%) scale(1);
   }
   .player__time {
@@ -2039,6 +2044,42 @@ main.is-loading {
   opacity: 0.55;
   pointer-events: none;
   transition: opacity 0.15s var(--ease);
+}
+
+/* ---------------------------------------------------------------- 正文内图片 */
+
+/* 评论与作品说明里的 Markdown 图片（![](url)）。
+   图床的图尺寸不可控，限宽 + 限高，避免一张巨图把版面撑破。 */
+.inline-img {
+  display: block;
+  max-width: min(100%, 560px);
+  max-height: 460px;
+  width: auto;
+  height: auto;
+  margin: 8px 0;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-soft);
+  background: var(--ink-1);
+  object-fit: contain;
+}
+
+.inline-img__link {
+  display: block;
+  border-bottom: 0;
+}
+
+.inline-img__failed {
+  display: inline-block;
+  margin: 6px 0;
+  font-size: 12.5px;
+  color: var(--paper-3);
+  overflow-wrap: anywhere;
+}
+
+/* 评论里的图片可以再小一点，避免一条评论占满整屏 */
+.comment__text .inline-img {
+  max-width: min(100%, 420px);
+  max-height: 380px;
 }
 
 /* ---------------------------------------------------------------- 搜索排序 */

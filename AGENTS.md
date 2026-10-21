@@ -196,6 +196,32 @@ following: { id, createdAt, user:     { name, username, avatar, ... } }
 直接渲染外层会得到一堆「匿名」。前端用 `item.follower || item.user || item` 取。
 （Iwara 客户端显示正常，是因为它取的就是内层。）
 
+### 正文与评论的 Markdown
+
+Iwara 的**作品说明、评论、作者简介、论坛正文**都是 Markdown 内联语法：
+
+```
+![alt](https://img3.pixhost.cc/....jpg)     图片
+[文字](https://...)                          链接
+```
+
+真实例子：
+
+- 作品说明：`4K 60FPS Link: [patreon](https://www.patreon.com/c/xxx) /[爱赞助](https://azz.ee/xxx)`
+- 评论：`❤️👍` + `![](https://img3.pixhost.cc/….jpg)`
+
+`ui.js` 的 `linkify()` / `linkifyNode()` 用同一个 `tokenizeInline()` 解析这三种
+（图片 / Markdown 链接 / 裸 URL），其余语法按普通文本输出。
+
+**只保留 http(s)**：`safeHref()` 挡掉 `javascript:` 与 `data:` 伪协议。
+
+**不要自己再写一份。** 曾经有三份实现（`ui.js` 两份 + `views/watch.js` 里的
+`linkifyInto` 只认裸 URL），结果作品说明里的 `[patreon](…)` 一直显示成原始文本。
+现在只有 `ui.js` 一处。
+
+图片要放开 CSP：`img-src 'self' data: blob: https:`。外链图片直连图床，
+不经过 Worker——代价是图床能看到访客 IP；若要隐藏就改成走 `/media/` 代理。
+
 ### 搜索
 
 搜索页（`views/search.js`）有三处必须注意：

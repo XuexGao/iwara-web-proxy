@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="光圈与播放">
+  <rect width="32" height="32" rx="8" fill="#100D16"/>
+  <circle cx="16" cy="16" r="9.2" fill="none" stroke="#FF4E7C" stroke-width="2.4"/>
+  <path d="M13.9 11.5 21.2 16l-7.3 4.5z" fill="#F6F2EC"/>
+</svg>

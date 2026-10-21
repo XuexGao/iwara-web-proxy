@@ -332,24 +332,83 @@ export const RATING_LABELS = {
  * ⚠️ 不能直接 append 到 DOM：raw() 是包装对象，append 会渲染成 "[object Object]"。
  *   需要节点请用 linkifyNode()。
  */
-export function linkify(text) {
-  const value = String(text || '');
-  const parts = [];
-  const pattern = /https?:\/\/[^\s<>"']+/g;
-  let last = 0;
-  let match;
-  while ((match = pattern.exec(value))) {
-    if (match.index > last) parts.push(esc(value.slice(last, match.index)));
-    const href = match[0];
-    parts.push(
-      `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer nofollow">${esc(href)}</a>`
-    );
-    last = match.index + href.length;
-  }
-  if (last < value.length) parts.push(esc(value.slice(last)));
-  return raw(parts.join(''));
+/**
+ * Iwara 的正文与评论用的是 Markdown 内联语法：
+ *
+ *   ![alt](https://...jpg)      图片
+ *   [文字](https://...)          链接
+ *   裸的 https://...             也当链接
+ *
+ * 真实例子（作品说明）：
+ *   `4K 60FPS Link: [patreon](https://www.patreon.com/c/xxx) /[爱赞助](https://azz.ee/xxx)`
+ *
+ * 只认这三种，其余语法（标题、列表、代码块）按普通文本输出——
+ * 这类内容里几乎不会出现，解析多了反而容易把正常文字吃掉。
+ */
+const INLINE_PATTERN =
+  /!\[([^\]]*)\]\(([^)\s]+)\)|\[([^\]]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s<>"')]+)/g;
+
+/** 只允许 http(s) 链接，挡掉 javascript: / data: 之类的伪协议。 */
+function safeHref(url) {
+  const value = String(url || '').trim();
+  return /^https?:\/\//i.test(value) ? value : '';
 }
 
+/** 把一段文本切成 text / link / image 三种 token。 */
+function tokenizeInline(text) {
+  const value = String(text || '');
+  const tokens = [];
+  let last = 0;
+  let match;
+  INLINE_PATTERN.lastIndex = 0;
+
+  while ((match = INLINE_PATTERN.exec(value))) {
+    if (match.index > last) {
+      tokens.push({ type: 'text', value: value.slice(last, match.index) });
+    }
+
+    if (match[2] !== undefined) {
+      const href = safeHref(match[2]);
+      tokens.push(
+        href
+          ? { type: 'image', alt: match[1] || '', href }
+          : { type: 'text', value: match[0] }
+      );
+    } else if (match[4] !== undefined) {
+      const href = safeHref(match[4]);
+      tokens.push(
+        href ? { type: 'link', label: match[3], href } : { type: 'text', value: match[0] }
+      );
+    } else {
+      tokens.push({ type: 'link', label: match[5], href: match[5] });
+    }
+
+    last = match.index + match[0].length;
+  }
+
+  if (last < value.length) tokens.push({ type: 'text', value: value.slice(last) });
+  return tokens;
+}
+
+export function linkify(text) {
+  const out = [];
+  for (const token of tokenizeInline(text)) {
+    if (token.type === 'text') {
+      out.push(esc(token.value));
+    } else if (token.type === 'link') {
+      out.push(
+        `<a href="${esc(token.href)}" target="_blank" rel="noopener noreferrer nofollow">${esc(token.label)}</a>`
+      );
+    } else {
+      out.push(
+        `<a class="inline-img__link" href="${esc(token.href)}" target="_blank" rel="noopener noreferrer nofollow">` +
+          `<img class="inline-img" src="${esc(token.href)}" alt="${esc(token.alt)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />` +
+          `</a>`
+      );
+    }
+  }
+  return raw(out.join(''));
+}
 
 /**
  * 与 linkify 相同的效果，但返回真实 DOM 节点，可直接 append。
@@ -360,23 +419,42 @@ export function linkify(text) {
  */
 export function linkifyNode(text) {
   const fragment = document.createDocumentFragment();
-  const value = String(text || '');
-  const pattern = /https?:\/\/[^\s<>"']+/g;
-  let last = 0;
-  let match;
 
-  while ((match = pattern.exec(value))) {
-    if (match.index > last) {
-      fragment.append(document.createTextNode(value.slice(last, match.index)));
+  for (const token of tokenizeInline(text)) {
+    if (token.type === 'text') {
+      fragment.append(document.createTextNode(token.value));
+      continue;
     }
+
     const anchor = document.createElement('a');
-    anchor.href = match[0];
+    anchor.href = token.href;
     anchor.target = '_blank';
     anchor.rel = 'noopener noreferrer nofollow';
-    anchor.textContent = match[0];
+
+    if (token.type === 'link') {
+      anchor.textContent = token.label;
+    } else {
+      // 图片：外链原图不一定能加载（图床挂了、防盗链），
+      // 失败时退回成一个可点的链接，别留一块空白。
+      anchor.className = 'inline-img__link';
+      const img = document.createElement('img');
+      img.className = 'inline-img';
+      img.src = token.href;
+      img.alt = token.alt || '';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.referrerPolicy = 'no-referrer';
+      img.addEventListener('error', () => {
+        const fallback = document.createElement('span');
+        fallback.className = 'inline-img__failed';
+        fallback.textContent = `[图片加载失败：${token.href}]`;
+        anchor.replaceWith(fallback);
+      });
+      anchor.append(img);
+    }
+
     fragment.append(anchor);
-    last = match.index + match[0].length;
   }
-  if (last < value.length) fragment.append(document.createTextNode(value.slice(last)));
+
   return fragment;
 }

@@ -283,7 +283,7 @@ async function load(ctx, id, root, holder) {
     : null;
   if (bodyPanel) {
     const desc = bodyPanel.querySelector('.desc');
-    desc.append(linkifyInto(detail.body));
+    desc.append(linkifyNode(detail.body));
     desc.addEventListener('click', () => desc.classList.toggle('is-clamped'));
   }
 
@@ -511,25 +511,6 @@ function openDownload(sourceData, title) {
 }
 
 /** 把纯文本里的 URL 变成链接节点。 */
-function linkifyInto(text) {
-  const fragment = document.createDocumentFragment();
-  const pattern = /https?:\/\/[^\s<>"']+/g;
-  let last = 0;
-  let match;
-  const value = String(text || '');
-  while ((match = pattern.exec(value))) {
-    if (match.index > last) fragment.append(document.createTextNode(value.slice(last, match.index)));
-    const anchor = document.createElement('a');
-    anchor.href = match[0];
-    anchor.target = '_blank';
-    anchor.rel = 'noopener noreferrer nofollow';
-    anchor.textContent = match[0];
-    fragment.append(anchor);
-    last = match.index + match[0].length;
-  }
-  if (last < value.length) fragment.append(document.createTextNode(value.slice(last)));
-  return fragment;
-}
 
 /* ------------------------------------------------------------------ *
  * 评论
