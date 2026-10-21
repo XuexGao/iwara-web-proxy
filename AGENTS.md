@@ -328,7 +328,7 @@ npm run test:player    # 12 项桌面播放器手势（单击/双击/长按/画�
 npm run test:mobile    # 13 项移动端手势（单击显隐控件、双击暂停）
 npm run test:page      # 17 项分页（每页 30、翻页回顶、刷新保持）
 npm run test:download  # 12 项下载文件名（含 RFC 5987 中文编码）
-npm run test:linkify   # 13 项 linkify（防 [object Object] 回归）
+npm run test:linkify   # 25 项 linkify（Markdown 链接/图片、防 [object Object]）
 npm run test:theme     # 7 项主题持久化与首帧无闪烁
 npm run test:ui        # 播放器、悬停预览、离开即停止
 npm run check          # import 具名导出一致性
