@@ -91,6 +91,7 @@ async function handleGateRoutes(request, env, url) {
       'cache-control': 'no-store'
     });
     if (result.setCookie) headers.append('set-cookie', result.setCookie);
+    if (result.retryAfter) headers.set('retry-after', String(result.retryAfter));
     if (result.ok) {
       return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
     }
@@ -110,6 +111,7 @@ async function handleGateRoutes(request, env, url) {
       'cache-control': 'no-store'
     });
     if (result.setCookie) headers.append('set-cookie', result.setCookie);
+    if (result.retryAfter) headers.set('retry-after', String(result.retryAfter));
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
   }
 
@@ -205,7 +207,15 @@ async function routeApi(request, env, url) {
 
   if (path.startsWith('/api/sources/')) {
     if (request.method !== 'GET') return json({ error: '方法不允许。' }, 405);
-    const videoId = decodeURIComponent(path.slice('/api/sources/'.length)).replace(/\/+$/, '');
+    // 畸形百分号编码会让 decodeURIComponent 抛 URIError，
+    // 之前被外层兜成 500，其实是客户端的错，应该回 400。
+    let videoId;
+    try {
+      videoId = decodeURIComponent(path.slice('/api/sources/'.length)).replace(/\/+$/, '');
+    } catch {
+      return json({ error: '作品 ID 编码不合法。' }, 400);
+    }
+    if (!videoId) return json({ error: '缺少作品 ID。' }, 400);
     const auth = await resolveAuth(request, env);
     const response = await handleSources(request, env, videoId, auth);
     if (auth.setCookie) response.headers.append('set-cookie', auth.setCookie);

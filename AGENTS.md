@@ -333,6 +333,7 @@ npm run test:theme     # 7 项主题持久化与首帧无闪烁
 npm run test:ui        # 播放器、悬停预览、离开即停止
 npm run check          # import 具名导出一致性
 npm run test:search    # 12 项搜索（复数 type / unwrap / 共享 Token）
+npm run test:hardening # 31 项安全加固（路径穿越 / 媒体防盗链 / 频控 / CSRF）
 npm run shots          # 重新生成 README 截图（输出到 docs/screenshots/）
 ```
 
@@ -385,7 +386,16 @@ SITE_PASSWORD='@Gao123456' node dev-server.mjs
     - `/css/*` 与 `/js/*` 有边缘缓存，`cf-cache-status: HIT` 时可能还是旧文件，
       加个 `?v=<时间戳>` 再看。缓存 TTL 已压到 60 秒，就是为了缩短这个窗口——
       `index.html` 里的资源路径不带版本号，长缓存会导致「新 HTML + 旧 JS/CSS」。
-12. **要排序的块必须同级。** 播放页拆成 head/author/details/comments/related
+12. **`includes('..')` 抓不到 `%2e%2e`。** 路径白名单必须同时拒绝编码形式的
+    点段与分隔符（`%2e` / `%2f` / `%5c` / `%25`）：字面量检查漏掉之后，
+    上游解码时可能真的变成 `../`。`api.js` 与 `media.js` 都按这个来。
+13. **`contain: paint` 会裁剪子元素。** 进度条轨道曾经带 `contain: layout paint`，
+    结果 9px 的圆点被压进 4px 的轨道里。需要溢出显示的容器只能用 `layout style`。
+14. **共享 Token 不该让缓存失效。** 缓存只对「访客自带身份」关闭（session / inline），
+    站点级共享 Token 对所有人是同一份，必须允许缓存，否则最需要省额度的场景反而零缓存。
+15. **缓存 key 要带站点维度。** `_site` 只影响请求头、不影响目标主机，
+    而它在构造 target 前就被删掉了，不补回 key 会让主站与 AI 站串同一个缓存条目。
+16. **要排序的块必须同级。** 播放页拆成 head/author/details/comments/related
     五个同级块，才能让手机端排成「视频→作者→说明→评论→相关」；
     把评论塞进主栏内部就没法排了。
 

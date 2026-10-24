@@ -66,15 +66,34 @@ const SAFE_METHODS = new Set(['GET', 'HEAD']);
 
 export function isAllowedApiPath(pathname) {
   if (!pathname.startsWith('/')) return false;
+
+  // ① 编码形式的点段与分隔符一律拒绝。
+  //
+  // 光靠 includes('..') 抓不到 `%2e%2e`：`/videos/%2e%2e%2fuser/password`
+  // 里没有字面量 `..`，却可能在**上游**被解码成 `/user/password`，
+  // 从而绕过下面的 BLOCKED_PATHS。这类"编码咒语"没有任何正当用途
+  // （用户名/标签里的中文是用 UTF-8 百分号编码，不会编码点与斜线）。
+  if (/%2e|%2f|%5c|%25/i.test(pathname)) return false;
+
   if (pathname.includes('//')) return false;
   if (pathname.includes('..')) return false;
   if (pathname.includes('\\')) return false;
   // 控制字符一律拒绝；其余（含 percent-encoded 的 CJK 用户名/标签）放行。
   if (/[\u0000-\u001f\u007f]/.test(pathname)) return false;
 
-  const root = pathname.slice(1).split('/')[0].toLowerCase();
+  // ② 规范化后必须与原文完全一致。现在的实现里 pathname 已被 URL 解析器
+  // 归一过，这一步是兜底：将来若改成从别处取路径，也不会悄悄放过点段。
+  let normalized;
+  try {
+    normalized = new URL(pathname, 'https://upstream.invalid').pathname;
+  } catch {
+    return false;
+  }
+  if (normalized !== pathname) return false;
+
+  const root = normalized.slice(1).split('/')[0].toLowerCase();
   if (!ALLOWED_ROOTS.has(root)) return false;
-  if (BLOCKED_PATHS.has(pathname.slice(1).toLowerCase())) return false;
+  if (BLOCKED_PATHS.has(normalized.slice(1).toLowerCase())) return false;
   return true;
 }
 
@@ -102,14 +121,27 @@ export async function handleIwaraApi(request, env, upstreamPath, params, auth) {
   const target = `https://${API_HOSTS[0]}${upstreamPath}${query ? `?${query}` : ''}`;
 
   const ttl = Math.max(0, Number.parseInt(env?.API_CACHE_TTL ?? '30', 10) || 0);
+
+  // 只有「访客自带身份」才绕过缓存：
+  //   - session / inline 的响应是按账号算的（订阅、收藏、点赞态），缓存会串号；
+  //   - shared（站点级共享 Token）对所有人是同一个身份，缓存它是安全的，
+  //     而且正是最需要省额度的场景。
+  // 早期写成 !auth.token，导致一配共享 Token 就完全没缓存。
+  const identityBound = auth.kind === 'session' || auth.kind === 'inline';
   const cacheAllowed =
     ttl > 0 &&
     SAFE_METHODS.has(request.method) &&
-    !auth.token &&
+    !identityBound &&
     shouldCache(upstreamPath) &&
     request.headers.get('X-No-Cache') !== '1';
 
-  const cacheKey = cacheAllowed ? new Request(target, { method: 'GET' }) : null;
+  // 缓存键必须带站点维度：_site 只影响请求头，不影响目标主机，
+  // 而它在上一步已被 delete，不补回来的话 iwara.ai 与主站会串同一个缓存条目。
+  const cacheKey = cacheAllowed
+    ? new Request(`${target}${query ? '&' : '?'}__site=${encodeURIComponent(site.key)}`, {
+        method: 'GET'
+      })
+    : null;
   if (cacheKey) {
     const hit = await safeCacheMatch(cacheKey);
     if (hit) return hit;

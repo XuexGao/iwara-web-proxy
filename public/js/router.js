@@ -13,6 +13,10 @@ let renderToken = 0;
 let fallbackHandler = null;
 let beforeEach = null;
 let onAfterRender = null;
+// popstate 时要把记录下来的滚动位置带进下一次 render
+let pendingScrollRestore = null;
+// 上一次真正渲染的 hash：popstate 时用来判断是否需要在原地重渲染
+let lastRenderedHash = '';
 
 function compile(pattern) {
   const names = [];
@@ -58,6 +62,9 @@ export function parseHash(hash = location.hash) {
 export function navigate(to, { replace = false } = {}) {
   const target = to.startsWith('#') ? to : `#${to}`;
   if (location.hash === target) return;
+  // 离开当前视图前先把滚动位置记到当前 history 条目上，
+  // 这样用户点"返回"能回到原来的位置。
+  if (!replace) rememberScroll();
   if (replace) history.replaceState(null, '', target);
   else location.hash = target;
 }
@@ -137,7 +144,19 @@ async function render() {
   else mount.replaceChildren(document.createTextNode(String(node ?? '')));
 
   mount.focus({ preventScroll: true });
-  scrollToTop();
+
+  // 返回上一页时恢复原来的滚动位置，其余情况回到顶部。
+  // 这个站的核心用法是「刷列表 → 点进去看 → 返回继续刷」，
+  // 每次返回都跳回顶部会让人找不到刚才看到哪。
+  const restoreTo = pendingScrollRestore;
+  pendingScrollRestore = null;
+  if (restoreTo !== null) {
+    restoreScroll(restoreTo);
+  } else {
+    scrollToTop();
+  }
+
+  lastRenderedHash = location.hash;
   onAfterRender?.(ctx);
 }
 
@@ -148,6 +167,33 @@ async function render() {
  * 而且新内容还没布局完，滚动会被后续的 reflow 抵消。
  * 所以这里连做三次（立刻 + 下一帧 + 稍后），并用 instant 避免平滑滚动打断。
  */
+/**
+ * 记录当前滚动位置并挂到 history 条目上。
+ *
+ * 每次导航前调用：这样点"返回"时 popstate 读到的就是离开时的位置。
+ */
+function rememberScroll() {
+  const y = window.scrollY || 0;
+  const state = { ...(history.state || {}), scrollY: y };
+  try {
+    history.replaceState(state, '', location.href);
+  } catch {
+    /* 某些浏览器在受限状态下会抛错，忽略即可 */
+  }
+}
+
+/** 还原滚动位置。要等布局稳定，否则页面还没长到那个高度，scrollTo 会被夹断。 */
+function restoreScroll(y) {
+  const apply = () => window.scrollTo({ top: y, left: 0, behavior: 'instant' });
+  apply();
+  requestAnimationFrame(() => {
+    apply();
+    requestAnimationFrame(apply);
+  });
+  // 列表图片陆续撑开高度后可能又不够高，稍后再补一次
+  setTimeout(apply, 120);
+}
+
 function scrollToTop() {
   const toTop = () => window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   toTop();
@@ -196,6 +242,16 @@ const api = {
   parseHash,
   start() {
     window.addEventListener('hashchange', render);
+
+    // 浏览器前进/后退：取回该条目记录的滚动位置，render 完成后还原。
+    window.addEventListener('popstate', () => {
+      const y = history.state?.scrollY;
+      pendingScrollRestore = typeof y === 'number' ? y : null;
+      // popstate 之后浏览器自己也会触发 hashchange（hash 路由），渲染在那里发生。
+      // 若 hash 没变（同一视图内），主动渲染一次。
+      if (!location.hash || location.hash === lastRenderedHash) render();
+    });
+
     if (!location.hash) history.replaceState(null, '', '#/');
     return render();
   },

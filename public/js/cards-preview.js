@@ -21,13 +21,33 @@ function canPreview() {
   return pointerFine && getSetting('hoverPreview');
 }
 
+/**
+ * 回收预览资源。
+ *
+ * ⚠️ 这里**不能**把 entry 标记成"永久作废"：鼠标移开只是暂时收起预览，
+ * 再悬停同一张卡片时应该能重新加载。早期用一个 destroyed 标志同时表示
+ * "资源已回收"和"视图已销毁"，结果每张卡片的预览只有一次寿命。
+ * 视图真的被销毁时用 abort()，那才是不可恢复的。
+ */
 function retire(entry) {
-  entry.destroyed = true;
   clearTimeout(entry.timer);
+  entry.timer = 0;
   clearTimeout(entry.idleTimer);
+  entry.idleTimer = 0;
   entry.video?.remove();
   entry.video = null;
+  entry.ready = false;
+  if (entry.objectUrl) {
+    URL.revokeObjectURL(entry.objectUrl);
+    entry.objectUrl = null;
+  }
   live.delete(entry);
+}
+
+/** 视图销毁：与 retire 的区别是此后不再重建。 */
+function abort(entry) {
+  entry.aborted = true;
+  retire(entry);
 }
 
 function enforceLimit() {
@@ -49,16 +69,16 @@ export function attachPreview(cover, videoId) {
     video: null,
     timer: 0,
     idleTimer: 0,
-    destroyed: false,
+    aborted: false,
     ready: false,
     scrubbing: false,
     objectUrl: null
   };
 
   const ensureVideo = async () => {
-    if (entry.destroyed || entry.video) return;
+    if (entry.aborted || entry.video || !cover.isConnected) return;
     const url = await getPreviewSource(videoId);
-    if (!url || entry.destroyed || !cover.isConnected) return;
+    if (!url || entry.aborted || !cover.isConnected) return;
 
     const video = document.createElement('video');
     video.src = url;
@@ -85,7 +105,8 @@ export function attachPreview(cover, videoId) {
   };
 
   const onEnter = () => {
-    if (!canPreview() || entry.video || entry.timer) return;
+    if (!canPreview() || entry.aborted || !cover.isConnected) return;
+    if (entry.video || entry.timer) return;
     entry.timer = setTimeout(ensureVideo, HOVER_DELAY);
   };
 
@@ -107,7 +128,7 @@ export function attachPreview(cover, videoId) {
     }
     clearTimeout(entry.idleTimer);
     entry.idleTimer = setTimeout(() => {
-      if (!entry.destroyed && entry.video) entry.video.play().catch(() => {});
+      if (entry.video) entry.video.play().catch(() => {});
     }, IDLE_RESUME);
   };
 
@@ -126,5 +147,7 @@ export function attachPreview(cover, videoId) {
 
 /** 页面切换时统一收尾。 */
 export function stopAllPreviews() {
-  for (const entry of [...live]) retire(entry);
+  // 只处理还活着的条目：那些已经 retire 过的卡片，其元素随视图一起被丢弃，
+  // 事件也不会再触发，无需逐个标记。
+  for (const entry of [...live]) abort(entry);
 }

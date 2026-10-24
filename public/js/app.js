@@ -17,7 +17,6 @@ import {
   onSessionChange,
   onSettingChange,
   refreshSession,
-  refreshSession as _refresh,
   setSetting,
   setTheme
 } from './store.js';
@@ -175,10 +174,15 @@ function renderAccount(session) {
   } else {
     nameNode.textContent = '未登录';
     avatarNode.replaceChildren(iconNode('user'));
+    // 配置还没回来时（首屏第一帧）不要说"本实例未开放登录"——
+    // 那句话是错的，会在每次加载时闪一下。先给中性文案。
+    const sub = !session.ready
+      ? '正在读取站点配置…'
+      : session.loginEnabled
+        ? '登录后可搜索、收藏与评论'
+        : '本实例未开放登录';
     head.replaceChildren(
-      session.loginEnabled
-        ? tpl`<strong>未登录</strong><span>登录后可搜索、收藏与评论</span>`
-        : tpl`<strong>未登录</strong><span>本实例未开放登录</span>`
+      tpl`<strong>未登录</strong><span>${sub}</span>`
     );
     logoutButton.hidden = true;
     loginLink.hidden = !session.loginEnabled;

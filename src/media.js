@@ -20,10 +20,37 @@ const IMAGE_PATH_PATTERN = /^\/image\/(thumbnail|large|original|avatar|profileHe
 
 export function buildImageTarget(pathname) {
   const path = pathname.startsWith('/') ? pathname : `/${pathname}`;
+  // 与 api.js 的路径校验同样的问题：includes('..') 抓不到 `%2e%2e`，
+  // 而它会在上游被解码成真正的点段，从而绕过下面的目录白名单。
+  if (/%2e|%2f|%5c|%25/i.test(path)) return null;
   if (path.includes('..') || path.includes('//') || path.includes('\\')) return null;
   if (/[\u0000-\u001f\u007f]/.test(path)) return null;
   if (!IMAGE_PATH_PATTERN.test(path)) return null;
   return `https://${IMAGE_HOST}${path}`;
+}
+
+/**
+ * 媒体请求是否来自本站页面。
+ *
+ * 目的不是鉴权（媒体请求本来就靠站点密码的 Cookie 放行），而是拦住
+ * "第三方网页把我的域名当免费 CDN"：那种请求会带外站的 Referer / Sec-Fetch-Site。
+ *
+ * 判定宽松但够用：
+ * - 有 Sec-Fetch-Site 且不是 same-origin / none → 拒绝；
+ * - 没有 Sec-Fetch-Site（老浏览器、curl）则看 Referer，跨站才拒绝；
+ * - 两者都没有（直接在地址栏打开、下载工具）→ 放行，否则会把正常下载挡掉。
+ */
+export function isSameSiteMediaRequest(request) {
+  const site = request.headers.get('Sec-Fetch-Site');
+  if (site && site !== 'same-origin' && site !== 'none') return false;
+
+  const referer = request.headers.get('Referer');
+  if (!referer) return true;
+  try {
+    return new URL(referer).host === new URL(request.url).host;
+  } catch {
+    return false;
+  }
 }
 
 export function parseVideoTarget(rawUrl) {
@@ -95,8 +122,10 @@ async function proxyMedia(request, env, targetUrl, kind) {
   }
 
   const headers = new Headers({
-    'access-control-allow-origin': '*',
-    'cross-origin-resource-policy': 'cross-origin',
+    // 媒体只服务本站页面：同源播放/看图并不需要 CORS，
+    // 早期给的通配 ACAO + CORP: cross-origin 等于把自己变成免费 CDN，
+    // 任何第三方网页都能直接 <video src="https://本站/media/v?u=…">。
+    'cross-origin-resource-policy': 'same-origin',
     'cache-control':
       kind === 'image'
         ? `public, max-age=${ttl || 86400}, immutable`
@@ -151,6 +180,10 @@ function buildContentDisposition(filename) {
 export async function handleMedia(request, env, url) {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return fail('媒体接口只接受 GET / HEAD。', 405);
+  }
+
+  if (!isSameSiteMediaRequest(request)) {
+    return fail('这个媒体地址只能在本站页面里使用。', 403);
   }
 
   const pathname = url.pathname;

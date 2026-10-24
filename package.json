@@ -22,7 +22,8 @@
     "test:download": "node test/download.test.mjs",
     "test:linkify": "node test/linkify.test.mjs",
     "test:relations": "node test/relations.test.mjs",
-    "test:search": "node test/search.test.mjs"
+    "test:search": "node test/search.test.mjs",
+    "test:hardening": "node test/hardening.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.126.0"

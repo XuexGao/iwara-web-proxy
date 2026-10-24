@@ -43,7 +43,9 @@
 
   --paper: #efe9f5;
   --paper-2: #b9b0c9;
-  --paper-3: #7c7392;
+  /* 三级文字：对小字号（11-12.5px）要满足 WCAG AA 4.5:1，
+     原来 #7c7392 只有 4.33。这个是 5.32。 */
+  --paper-3: #8b82a1;
 
   --rose: #ff4e7c;
   --rose-deep: #d63a63;
@@ -96,7 +98,7 @@
 
   --paper: #1f1a15;        /* 主文字：墨 */
   --paper-2: #4c433a;      /* 次级文字 */
-  --paper-3: #857a6c;      /* 弱化文字 */
+  --paper-3: #736858;      /* 弱化文字（对比度 4.89，AA 达标；原 #857a6c 只有 3.77） */
 
   --rose: #c92a52;         /* 加深，保证在白底上够对比 */
   --rose-deep: #a3153c;
@@ -1079,6 +1081,21 @@ select.input {
   min-width: 0;
 }
 
+/* 右栏（作者 + 相关作品）比左栏短很多，长篇评论会把右栏下方留出上千像素空白。
+   让它吸顶跟随滚动，视觉上就不会像"布局没做完"。
+   只在有足够高度的桌面生效，窄屏单列时没有意义。 */
+@media (min-width: 1181px) {
+  .watch__col--side {
+    position: sticky;
+    top: calc(var(--topbar-h, 56px) + 16px);
+    align-self: start;
+    max-height: calc(100vh - var(--topbar-h, 56px) - 32px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+}
+
 .watch__head-block,
 .watch__details,
 .watch__comments {
@@ -1287,6 +1304,18 @@ select.input {
   color: #e9e4f0;
   white-space: nowrap;
   flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 「当前 / 总时长」合并显示，两个数字单独包一层方便只改其中一个 */
+.player__time-now,
+.player__time-total {
+  font-style: normal;
+}
+
+.player__time-sep {
+  opacity: 0.45;
+  padding: 0 1px;
 }
 
 .player__scrub {
@@ -1481,15 +1510,48 @@ select.input {
   opacity: 1;
 }
 
-/* 移动端：进度条要更粗更好抓，滑动条也加长。 */
+/* 移动端控制栏：进度条必须拿到足够的宽度。
+   390px 视口下原来的单行塞了 8 个控件，实测进度条只剩 39px，等于没法拖。
+   方案是改成两行——第一行「时间 + 进度条」，第二行放按钮。
+   注意不能简单隐藏音量：静音按钮在音量控件里面，砍掉它就没了静音入口，
+   所以只隐藏音量滑条（触屏上它本来就无效，iOS 不允许 JS 改系统音量）。 */
 @media (max-width: 680px) {
   .player__controls {
-    gap: 8px;
-    padding: 22px 12px 10px;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    padding: 16px 10px 8px;
   }
+
+  /* 第一行：时间 + 进度条 */
+  .player__time {
+    order: 1;
+    font-size: 11.5px;
+  }
+
   .player__scrub {
-    height: 34px;
+    order: 2;
+    /* 吃掉第一行剩下的全部宽度 */
+    flex: 1 1 120px;
+    min-width: 120px;
+    height: 32px;
   }
+
+  /* 第二行：所有按钮 */
+  .player__controls > button,
+  .player__volume,
+  .quality {
+    order: 3;
+  }
+
+  /* 第二行整体靠右，和第一行的时间左对齐形成层次 */
+  .player__volume {
+    margin-left: auto;
+  }
+
+  .player__volume input {
+    display: none;
+  }
+
   .player__track {
     height: 6px;
   }
@@ -1501,13 +1563,6 @@ select.input {
     height: 11px;
     margin-left: -5.5px;
     transform: translateY(-50%) scale(1);
-  }
-  .player__time {
-    font-size: 11.5px;
-  }
-  /* 音量滑条在手机上没意义（硬件键更好用），收起来给进度条腾地方。 */
-  .player__volume input {
-    display: none;
   }
 }
 
@@ -2435,6 +2490,39 @@ main.is-loading {
 
 .prose li {
   margin-bottom: 5px;
+}
+
+/* ---------------------------------------------------------------- 触控目标 */
+
+/* 触屏设备上把可点区域抬到 44px（Apple HIG / WCAG 2.5.5 的建议值）。
+   只对粗指针生效，桌面鼠标不受影响——那里 34px 更好看也更精准。 */
+@media (pointer: coarse) {
+  #topnav a,
+  #theme-button,
+  #account-button,
+  .iconbtn {
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .chip {
+    min-height: 36px;
+  }
+
+  .card__cover {
+    /* 卡片本身够大，这里只是保证封面整块可点 */
+    min-height: 44px;
+  }
+
+  .player__controls button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .player__controls .quality button {
+    min-width: 52px;
+  }
 }
 
 /* ---------------------------------------------------------------- 自适应 */

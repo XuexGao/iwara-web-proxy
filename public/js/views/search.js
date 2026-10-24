@@ -8,9 +8,8 @@
 
 import { fetchTags, formatCount, formatDate, search, tagLabel } from '../api.js';
 import { lede, pageFromQuery, personCard, renderPagedFeed, workCard } from '../cards.js';
-import router from '../router.js';
 import { getSetting, getSession } from '../store.js';
-import { icon, stateBlock, tpl } from '../ui.js';
+import { stateBlock, tpl } from '../ui.js';
 
 /**
  * 搜索类型。
@@ -306,25 +305,20 @@ export async function renderSearch(ctx) {
   });
   head.append(countNode);
 
-  const input = tpl`<input class="input" type="search" name="q" value="${query}" placeholder="作品标题、作者名或标签…" autocomplete="off" enterkeyhint="search" aria-label="搜索关键词" />`;
-  const form = tpl`
-    <form role="search" style="display:flex;gap:10px;align-items:center;margin-bottom:16px">
-      ${input}
-      <button class="btn btn--primary" type="submit">${icon('search')}<span>搜索</span></button>
-    </form>`;
-
-  const onSubmit = (event) => {
-    event.preventDefault();
-    const value = input.value.trim();
-    if (!value) {
-      router.navigate('/search');
-      return;
+  // 不再在页内重复一个搜索框：顶栏已经有一个，两个同功能的输入框
+  // 既浪费首屏高度也容易让人点错。这里只把顶栏的输入框同步成当前关键词。
+  const globalInput = document.getElementById('global-search-input');
+  if (globalInput) {
+    globalInput.value = query;
+    // 触屏上自动聚焦会弹出键盘挡住结果，只在有精确指针时聚焦
+    if (query && window.matchMedia('(pointer: fine)').matches) {
+      globalInput.focus({ preventScroll: true });
+      globalInput.select();
     }
-    const params = new URLSearchParams({ q: value, type, sort });
-    router.navigate(`/search?${params.toString()}`);
-  };
-  form.addEventListener('submit', onSubmit);
-  ctx.onCleanup(() => form.removeEventListener('submit', onSubmit));
+  }
+  ctx.onCleanup(() => {
+    if (globalInput) globalInput.value = '';
+  });
 
   const chips = tpl`<div class="chips chips--scroll"></div>`;
   for (const option of TYPES) {
@@ -392,5 +386,5 @@ export async function renderSearch(ctx) {
     body.append(feed);
   }
 
-  return tpl`<div>${head}${form}${chips}${sortChips}${body}</div>`;
+  return tpl`<div>${head}${chips}${sortChips}${body}</div>`;
 }

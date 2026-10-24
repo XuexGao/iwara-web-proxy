@@ -130,8 +130,67 @@ export function gateConfig(env) {
  * 校验密码。
  * @returns {{ok: boolean, status?: number, error?: string, setCookie?: string}}
  */
+/**
+ * 登录失败计数（进程内）。
+ *
+ * 注意：这只在单个 isolate 内有效，换一个边缘节点就重新计数，
+ * 所以它挡的是"同一连接上的连续爆破"，不是分布式爆破。
+ * 真正的防护应该在 Cloudflare 后台给 /api/gate/login 加 Rate Limiting 规则，
+ * 文档里已写明。这里做的是"没有配置也不至于完全裸奔"。
+ */
+const LOGIN_WINDOW_MS = 10 * 60 * 1000;
+const LOGIN_MAX_FAILS = 8;
+const loginFails = new Map();
+
+function loginClientKey(request) {
+  return (
+    request.headers.get('CF-Connecting-IP') ||
+    request.headers.get('X-Forwarded-For') ||
+    'unknown'
+  );
+}
+
+function tooManyFails(key) {
+  const now = Date.now();
+  const entry = loginFails.get(key);
+  if (!entry) return { blocked: false };
+  if (now - entry.first > LOGIN_WINDOW_MS) {
+    loginFails.delete(key);
+    return { blocked: false };
+  }
+  if (entry.count < LOGIN_MAX_FAILS) return { blocked: false };
+  return { blocked: true, retryAfter: Math.ceil((entry.first + LOGIN_WINDOW_MS - now) / 1000) };
+}
+
+function recordFail(key) {
+  const now = Date.now();
+  const entry = loginFails.get(key);
+  if (!entry || now - entry.first > LOGIN_WINDOW_MS) {
+    loginFails.set(key, { count: 1, first: now });
+    return;
+  }
+  entry.count += 1;
+  // 顺手清理过期条目，避免长驻 isolate 里无限增长
+  if (loginFails.size > 500) {
+    for (const [k, v] of loginFails) {
+      if (now - v.first > LOGIN_WINDOW_MS) loginFails.delete(k);
+    }
+  }
+}
+
 export async function handleGateLogin(request, env) {
   if (!gateEnabled(env)) return { ok: true };
+
+  const clientKey = loginClientKey(request);
+  const limit = tooManyFails(clientKey);
+  if (limit.blocked) {
+    return {
+      ok: false,
+      status: 429,
+      error: `尝试次数过多，请 ${Math.ceil(limit.retryAfter / 60)} 分钟后再试。`,
+      retryAfter: limit.retryAfter
+    };
+  }
 
   let payload;
   try {
@@ -146,10 +205,15 @@ export async function handleGateLogin(request, env) {
   const expected = normalizePassword(env.SITE_PASSWORD);
   const matched = await safeEqual(given, expected);
   if (!matched) {
+    recordFail(clientKey);
     // 统一文案，不区分「密码为空」「密码错误」，避免被用来探测。
+    // 再补一个固定延迟：恒定时间比较挡住了计时侧信道，
+    // 失败路径的额外停顿则让在线爆破变慢。
+    await new Promise((resolve) => setTimeout(resolve, 300));
     return { ok: false, status: 401, error: '密码不正确。' };
   }
 
+  loginFails.delete(clientKey);
   return { ok: true, setCookie: await issueGateCookie(env) };
 }
 
@@ -183,7 +247,11 @@ export function gateResponse(request, { siteName = 'Iwara 映像' } = {}) {
       'content-type': 'text/html; charset=utf-8',
       'cache-control': 'no-store',
       'x-content-type-options': 'nosniff',
-      'referrer-policy': 'same-origin'
+      'referrer-policy': 'same-origin',
+      // 这是唯一让用户手输密码的页面，必须禁止被 iframe 套壳
+      // （否则恶意站点可以把登录框嵌进去，诱导输入后借走 Cookie）。
+      'x-frame-options': 'DENY',
+      'content-security-policy': "frame-ancestors 'none'; form-action 'self'; base-uri 'none'",
     }
   });
 }

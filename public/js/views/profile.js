@@ -138,7 +138,8 @@ export async function renderProfile(ctx, { username }) {
           '',
           `#/user/${encodeURIComponent(user.username)}?tab=${active}&sort=${sort}`
         );
-        mountContent();
+        // 换排序等于换了一份列表，页码必须归零
+        mountContent(0);
       });
       sortBar.append(chip);
     }
@@ -154,7 +155,7 @@ export async function renderProfile(ctx, { username }) {
         paintSortBar();
         // 切标签时回到第 1 页：否则上一栏的页码会串到新的一栏。
         history.replaceState(null, '', `#/user/${encodeURIComponent(user.username)}?tab=${active}`);
-        mountContent();
+        mountContent(0);
       });
       tabBar.append(chip);
     }
@@ -163,11 +164,19 @@ export async function renderProfile(ctx, { username }) {
   // 切标签会连续调用，用一个序号让旧的请求结果不再写 DOM。
   let mountSeq = 0;
 
-  function mountContent() {
+  /**
+   * 渲染当前标签的内容。
+   *
+   * `page` 显式传入：切标签/切排序时传 0，首次渲染时才从地址里读。
+   * 早期版本在函数内部直接读 ctx.query，但切标签走的是 history.replaceState
+   * （不重新走路由渲染），ctx.query 永远是旧的，于是"在视频第 3 页切到图库"
+   * 会去要图库的第 3 页，通常就是空白。
+   */
+  function mountContent(page = pageFromQuery(ctx.query)) {
     const seq = ++mountSeq;
     content.replaceChildren();
 
-    const tabPage = pageFromQuery(ctx.query);
+    const tabPage = page;
 
     if (active === 'videos' || active === 'images') {
       const isImage = active === 'images';

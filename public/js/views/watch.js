@@ -132,6 +132,16 @@ async function load(ctx, id, root, holder) {
 
   function buildPlayerHost(data) {
     if (ctx.signal.aborted || holder.disposed) return tpl`<div></div>`;
+
+    // 重建前必须销毁旧实例：createPlayer 会在 document 上挂 keydown 与
+    // fullscreenchange 两个全局监听器，只在 destroy() 里摘除。
+    // 早期直接覆盖 player 变量，于是每点一次「刷新播放地址」就多一份监听，
+    // 按一次空格会同时触发多个播放器，旧 <video> 也可能继续出声。
+    if (player) {
+      player.destroy();
+      player = null;
+    }
+
     player = createPlayer({
       sources: data.sources || [],
       preview: data.preview,
@@ -190,7 +200,7 @@ async function load(ctx, id, root, holder) {
     <div class="watch__stats">
       <span>${icon('eye')} ${formatCount(detail.numViews)} 次播放</span>
       <span>${icon('heart')} ${formatCount(detail.numLikes)}</span>
-      <span>${icon('comment')} ${formatCount(detail.numComments)}</span>
+      <span data-stat="comments">${icon('comment')} ${formatCount(detail.numComments)}</span>
       ${detail.rating === 'ecchi' ? tpl`<span class="badge badge--ecchi">R18</span>` : null}
       ${detail.file?.size ? tpl`<span>${formatSize(detail.file.size)}</span>` : null}
       <span>${formatDate(detail.createdAt)}</span>
@@ -327,7 +337,19 @@ async function load(ctx, id, root, holder) {
       <div class="panel__title">评论 · ${formatCount(detail.numComments)}</div>
     </div>`;
   commentPanel.append(commentsHost);
-  mountComments(commentPanel, commentsHost, 'video', id, detail);
+  // 发评论成功后要同时更新面板标题和顶部统计，否则数字一直不动。
+  const bumpComments = () => {
+    const title = commentPanel.querySelector('.panel__title');
+    if (title) title.textContent = `评论 · ${formatCount(detail.numComments)}`;
+    const stat = stats.querySelector('[data-stat="comments"]');
+    if (stat) stat.replaceChildren(iconNode('comment'), document.createTextNode(` ${formatCount(detail.numComments)}`));
+  };
+  mountComments(commentPanel, commentsHost, 'video', id, detail, {
+    onPosted: () => {
+      detail.numComments = (Number(detail.numComments) || 0) + 1;
+      bumpComments();
+    }
+  });
 
   /* ---------------- 组装 ----------------
      版式参照 B 站：
@@ -522,7 +544,7 @@ function openDownload(sourceData, title) {
  * 不用改地址栏（那会让整个播放页连同视频重新加载），
  * 而是把分页条做成按钮，翻页后把评论区滚回视野内。
  */
-function mountComments(container, host, type, id, detail) {
+function mountComments(container, host, type, id, detail, { onPosted } = {}) {
   const PAGE_SIZE = 20;
 
   let page = 0;
@@ -552,6 +574,7 @@ function mountComments(container, host, type, id, detail) {
         if (page === 0 && comment?.id) list.prepend(commentNode(comment));
         input.value = '';
         toast('评论已提交');
+        onPosted?.();
         if (page !== 0) goTo(0);
       } catch (error) {
         toastError(error, '评论提交失败');

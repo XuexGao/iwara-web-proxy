@@ -38,7 +38,9 @@ export function userLink(user) {
  * ------------------------------------------------------------------ */
 
 function metaStat(iconName, value) {
-  if (!value) return null;
+  // 只隐藏"没有这个数据"的情况（undefined / null / 空串）。
+  // 0 是有效值：刚发布的作品就是 0 播放，藏掉反而让人以为数据缺失。
+  if (value === undefined || value === null || value === '') return null;
   return tpl`<span class="card__stat" data-stat="${iconName}">${icon(iconName)}${formatCount(value)}</span>`;
 }
 

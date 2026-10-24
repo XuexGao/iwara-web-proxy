@@ -74,8 +74,12 @@ export function createPlayer(options) {
 
   const toggleButton = tpl`<button type="button" data-act="toggle" aria-label="播放/暂停">${icon('play')}</button>`;
   const muteButton = tpl`<button type="button" data-act="mute" aria-label="静音">${icon('volume')}</button>`;
-  const elapsed = tpl`<span class="player__time">0:00</span>`;
-  const durationLabel = tpl`<span class="player__time">0:00</span>`;
+  // 当前时间与总时长合并成一个元素显示（「0:31 / 2:07」），
+  // 窄屏时省出的一格让进度条拿到更多宽度；宽屏也用同一份文案，
+  // 免得两处逻辑分叉。
+  const elapsed = tpl`<span class="player__time"><i class="player__time-now">0:00</i><span class="player__time-sep"> / </span><i class="player__time-total">0:00</i></span>`;
+  const elapsedNow = elapsed.querySelector('.player__time-now');
+  const elapsedTotal = elapsed.querySelector('.player__time-total');
   const played = tpl`<div class="player__played"></div>`;
   const buffered = tpl`<div class="player__buf"></div>`;
   const knob = tpl`<div class="player__knob"></div>`;
@@ -106,7 +110,6 @@ export function createPlayer(options) {
       ${toggleButton}
       ${elapsed}
       ${scrub}
-      ${durationLabel}
       <div class="player__volume">${muteButton}${volumeInput}</div>
       ${qualityWrap}
       <button type="button" data-act="pip" aria-label="画中画">${icon('pip')}</button>
@@ -135,9 +138,8 @@ export function createPlayer(options) {
     const ratio = total ? video.currentTime / total : 0;
     played.style.width = `${(ratio * 100).toFixed(3)}%`;
     knob.style.left = `${(ratio * 100).toFixed(3)}%`;
-    elapsed.textContent = formatDuration(video.currentTime);
-    if (!total) durationLabel.textContent = '--:--';
-    else durationLabel.textContent = formatDuration(total);
+    elapsedNow.textContent = formatDuration(video.currentTime);
+    elapsedTotal.textContent = total ? formatDuration(total) : '--:--';
 
     let bufferEnd = 0;
     try {
@@ -532,7 +534,7 @@ export function createPlayer(options) {
   });
 
   let refreshing = false;
-  video.addEventListener('error', async () => {
+  const handleVideoError = async () => {
     if (!video.src || refreshing) return;
     refreshing = true;
     setSpinner(false);
@@ -558,7 +560,8 @@ export function createPlayer(options) {
     });
     message.append(retry);
     stage.append(message);
-  });
+  };
+  video.addEventListener('error', handleVideoError);
 
   video.addEventListener('ended', () => {
     updateToggleIcon();
@@ -582,7 +585,17 @@ export function createPlayer(options) {
   element.classList.add('is-paused');
   applyVolumeUi();
   updateToggleIcon();
-  if (currentIndex >= 0) setSetting('quality', sources[currentIndex].name);
+  // 这里**不能**把设置改写成具体档位：用户选了「自动」时，playQuality 会帮我们
+  // 挑一个合适的档，但设置项必须保持 auto，否则播一次就被固定成某一档，
+  // 「自动」等于失效（之前就是这样）。只有用户主动点选时才写设置。
+  if (currentIndex >= 0 && getSetting('quality') !== 'auto') {
+    setSetting('quality', sources[currentIndex].name);
+  }
+
+  // src 是在本函数开头设置的，而 error 监听要到后面才绑得上。
+  // 如果失败得足够快（缓存的 403、服务端给了不支持的 MIME），
+  // error 事件已经错过，界面就会永远停在转圈上——这里补一次检查。
+  if (video.error) handleVideoError();
 
   /* ---------------- 控制栏自动隐藏 ---------------- */
 
@@ -646,6 +659,9 @@ export function createPlayer(options) {
   const onKeydown = (event) => {
     const target = event.target;
     if (target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+    // 进度条自己有 role="slider" 的 keydown（同样 ±5s）。
+    // 不排除它的话，焦点在进度条上按一次方向键会走两条路径，一次跳 10 秒。
+    if (target instanceof Element && target.closest('[role="slider"]')) return;
     if (event.metaKey || event.ctrlKey || event.altKey) return;
 
     const step = event.shiftKey ? 30 : 5;

@@ -43,14 +43,41 @@ export function base64UrlDecodeString(value) {
 
 const keyCache = new Map();
 
+/**
+ * 从口令派生 AES-GCM 密钥。
+ *
+ * 用 PBKDF2 而不是单次 SHA-256：Cookie 是发给浏览器的，攻击者能拿到密文，
+ * 单次哈希对短口令几乎等于明文（离线爆破很快）。PBKDF2 抬高每次尝试的成本。
+ *
+ * 代价是首次派生要跑 21 万轮，所以结果按 secret 缓存在模块作用域里——
+ * 每个 isolate 只算一次，后续请求直接命中缓存。
+ */
+const KDF_ITERATIONS = 210000;
+const KDF_SALT = 'iwara-web-proxy:v1';
+
 async function deriveKey(secret) {
   const cached = keyCache.get(secret);
   if (cached) return cached;
-  const digest = await crypto.subtle.digest('SHA-256', textEncoder.encode(secret));
-  const key = await crypto.subtle.importKey('raw', digest, { name: 'AES-GCM' }, false, [
-    'encrypt',
-    'decrypt'
-  ]);
+
+  const material = await crypto.subtle.importKey(
+    'raw',
+    textEncoder.encode(secret),
+    'PBKDF2',
+    false,
+    ['deriveKey']
+  );
+  const key = await crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: textEncoder.encode(KDF_SALT),
+      iterations: KDF_ITERATIONS,
+      hash: 'SHA-256'
+    },
+    material,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
   keyCache.set(secret, key);
   return key;
 }
@@ -145,22 +172,29 @@ export function isMutating(method) {
  * 防止第三方站点借浏览器 Cookie 发起 CSRF。
  */
 export function isSameOriginRequest(request) {
-  const origin = request.headers.get('Origin');
-  if (!origin) {
-    // 同源的普通表单/导航可能不带 Origin，用 Referer 兜底。
-    const referer = request.headers.get('Referer');
-    if (!referer) return true;
+  const self = new URL(request.url);
+  // 比 origin 而不是 host：协议与端口也是隔离边界，
+  // 只比 host 会让 http:// 与 https://、:8788 与 :443 互相认作同源。
+  const sameOrigin = (value) => {
     try {
-      return new URL(referer).host === new URL(request.url).host;
+      const parsed = new URL(value);
+      return (
+        parsed.protocol === self.protocol &&
+        parsed.hostname === self.hostname &&
+        (parsed.port || '') === (self.port || '')
+      );
     } catch {
       return false;
     }
-  }
-  try {
-    return new URL(origin).host === new URL(request.url).host;
-  } catch {
-    return false;
-  }
+  };
+
+  const origin = request.headers.get('Origin');
+  if (origin) return sameOrigin(origin);
+
+  // 同源的普通表单/导航可能不带 Origin，用 Referer 兜底。
+  const referer = request.headers.get('Referer');
+  if (!referer) return true;
+  return sameOrigin(referer);
 }
 
 /**
