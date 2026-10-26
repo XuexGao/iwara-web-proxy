@@ -138,8 +138,10 @@ export function gateConfig(env) {
  * 真正的防护应该在 Cloudflare 后台给 /api/gate/login 加 Rate Limiting 规则，
  * 文档里已写明。这里做的是"没有配置也不至于完全裸奔"。
  */
-const LOGIN_WINDOW_MS = 10 * 60 * 1000;
-const LOGIN_MAX_FAILS = 8;
+// 阈值放得比较宽：这是单用户站点，锁住自己比被爆破更糟。
+// 真正的防护交给 Cloudflare 的 Rate Limiting 规则。
+const LOGIN_WINDOW_MS = 5 * 60 * 1000;
+const LOGIN_MAX_FAILS = 15;
 const loginFails = new Map();
 
 function loginClientKey(request) {

@@ -46,38 +46,23 @@ const keyCache = new Map();
 /**
  * 从口令派生 AES-GCM 密钥。
  *
- * 用 PBKDF2 而不是单次 SHA-256：Cookie 是发给浏览器的，攻击者能拿到密文，
- * 单次哈希对短口令几乎等于明文（离线爆破很快）。PBKDF2 抬高每次尝试的成本。
+ * ⚠️ 这里**必须便宜**。开启站点密码后 `run_worker_first` 让每个请求
+ * （含每一个静态资源）都要过网关校验，因此派生成本会被放大十几倍。
+ * 曾经为了防离线爆破改成 PBKDF2 21 万轮，结果每个请求多 2~2.8 秒，
+ * 整页加载要几十秒，线上表现为"密码对了也进不去"。已回退。
  *
- * 代价是首次派生要跑 21 万轮，所以结果按 secret 缓存在模块作用域里——
- * 每个 isolate 只算一次，后续请求直接命中缓存。
+ * 真正的防护是：**配置 SESSION_SECRET**，这样密钥与密码无关，
+ * 拿到 Cookie 也无法反推密码。没配时才退回用密码派生（见 gate.js）。
+ * 结果按 secret 缓存在模块作用域，同一 isolate 内只算一次。
  */
-const KDF_ITERATIONS = 210000;
-const KDF_SALT = 'iwara-web-proxy:v1';
-
 async function deriveKey(secret) {
   const cached = keyCache.get(secret);
   if (cached) return cached;
-
-  const material = await crypto.subtle.importKey(
-    'raw',
-    textEncoder.encode(secret),
-    'PBKDF2',
-    false,
-    ['deriveKey']
-  );
-  const key = await crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt: textEncoder.encode(KDF_SALT),
-      iterations: KDF_ITERATIONS,
-      hash: 'SHA-256'
-    },
-    material,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  );
+  const digest = await crypto.subtle.digest('SHA-256', textEncoder.encode(secret));
+  const key = await crypto.subtle.importKey('raw', digest, { name: 'AES-GCM' }, false, [
+    'encrypt',
+    'decrypt'
+  ]);
   keyCache.set(secret, key);
   return key;
 }
