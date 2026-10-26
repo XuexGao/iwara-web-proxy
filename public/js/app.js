@@ -192,7 +192,7 @@ function renderAccount(session) {
   let gateButton = document.getElementById('gate-logout-button');
   if (!gateButton && session.gateRequired) {
     gateButton = tpl`<button role="menuitem" id="gate-logout-button" type="button">
-      ${icon('logout')}退出站点（需重新输密码）
+      ${icon('logout')}退出站点
     </button>`;
     gateButton.addEventListener('click', () => gateLogout());
     document.getElementById('account-panel')?.append(gateButton);

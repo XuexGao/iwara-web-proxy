@@ -97,7 +97,8 @@ function loginReq() {
   });
 }
 let lastStatus = 0;
-for (let i = 0; i < 10; i += 1) {
+// 阈值是 15 次 / 5 分钟，所以要多试几次才能触发
+for (let i = 0; i < 20; i += 1) {
   const result = await handleGateLogin(loginReq(), ENV);
   lastStatus = result.status || (result.ok ? 200 : 401);
   if (lastStatus === 429) break;

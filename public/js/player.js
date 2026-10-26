@@ -74,12 +74,8 @@ export function createPlayer(options) {
 
   const toggleButton = tpl`<button type="button" data-act="toggle" aria-label="播放/暂停">${icon('play')}</button>`;
   const muteButton = tpl`<button type="button" data-act="mute" aria-label="静音">${icon('volume')}</button>`;
-  // 当前时间与总时长合并成一个元素显示（「0:31 / 2:07」），
-  // 窄屏时省出的一格让进度条拿到更多宽度；宽屏也用同一份文案，
-  // 免得两处逻辑分叉。
-  const elapsed = tpl`<span class="player__time"><i class="player__time-now">0:00</i><span class="player__time-sep"> / </span><i class="player__time-total">0:00</i></span>`;
-  const elapsedNow = elapsed.querySelector('.player__time-now');
-  const elapsedTotal = elapsed.querySelector('.player__time-total');
+  const elapsed = tpl`<span class="player__time">0:00</span>`;
+  const durationLabel = tpl`<span class="player__time">0:00</span>`;
   const played = tpl`<div class="player__played"></div>`;
   const buffered = tpl`<div class="player__buf"></div>`;
   const knob = tpl`<div class="player__knob"></div>`;
@@ -109,6 +105,7 @@ export function createPlayer(options) {
     <div class="player__controls">
       ${toggleButton}
       ${elapsed}
+      ${durationLabel}
       ${scrub}
       <div class="player__volume">${muteButton}${volumeInput}</div>
       ${qualityWrap}
@@ -138,8 +135,9 @@ export function createPlayer(options) {
     const ratio = total ? video.currentTime / total : 0;
     played.style.width = `${(ratio * 100).toFixed(3)}%`;
     knob.style.left = `${(ratio * 100).toFixed(3)}%`;
-    elapsedNow.textContent = formatDuration(video.currentTime);
-    elapsedTotal.textContent = total ? formatDuration(total) : '--:--';
+    elapsed.textContent = formatDuration(video.currentTime);
+    if (!total) durationLabel.textContent = '--:--';
+    else durationLabel.textContent = formatDuration(total);
 
     let bufferEnd = 0;
     try {
