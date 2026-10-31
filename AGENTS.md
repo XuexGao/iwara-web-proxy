@@ -247,6 +247,34 @@ Iwara 的**作品说明、评论、作者简介、论坛正文**都是 Markdown 
 Wrangler 部署注意：`IWARA_AUTHORIZATION` 用 `wrangler secret put` 配置，
 **不能**同时写进 `wrangler.jsonc` 的 `vars`（同名会报 `Binding name already in use`）。
 
+### 搜索框粘贴链接
+
+在搜索框里粘 Iwara 链接（`https://www.iwara.tv/video/xxx`）时**不该拿去搜关键词**——
+那串永远搜不到。`public/js/links.js` 的 `routeFromInput()` 把它转成内部路由：
+
+| 链接 | 路由 |
+| :-- | :-- |
+| `/video/<id>[/slug]` | `/video/<id>` |
+| `/image/<id>` | `/image/<id>` |
+| `/profile/<name>` | `/user/<name>` |
+| `/playlist/<id>`、`/playlists` | 同名路由 |
+| `/tags/<id>` | `/tag/<id>` |
+| `/forum/<cat>[/<thread>]` | 同名路由 |
+| iwara.ai 的任意上述链接 | 同上，追加 `?_site=ai` |
+
+- 允许省略协议，主机名不区分大小写，子域（`m.iwara.tv`）都认。
+- `/user/<uuid>` 认不出用户名、未知路径、外站链接一律返回 `null`，交回关键词搜索。
+- `_site=ai` 由 `api.js` 的 `siteFromLocation()` 兜底读取，视图不必逐个传。
+
+### 主题
+
+三档：`system`（跟随系统）/ `dark` / `light`，存在 `iwara.theme.v1`（裸字符串）。
+
+- 首帧由 `theme-init.js` 应用，`system` 时看 `prefers-color-scheme`，避免闪一下。
+- 顶栏按钮是**三态循环**：跟随系统 → 深色 → 浅色 → 跟随系统。
+  曾经只做深/浅两态，点一次就再也回不到"跟随系统"了。
+- 跟随系统时图标是 `i-contrast`（半明半暗）并带 `is-auto` 类，和手动锁定区分。
+
 ### 播放页版式（B 站式两栏）
 
 播放页拆成 **5 个同级块**：`head` / `author` / `details` / `comments` / `related`。
@@ -333,6 +361,7 @@ npm run test:theme     # 7 项主题持久化与首帧无闪烁
 npm run test:ui        # 播放器、悬停预览、离开即停止
 npm run check          # import 具名导出一致性
 npm run test:search    # 12 项搜索（复数 type / unwrap / 共享 Token）
+npm run test:links     # 22 项链接识别（粘贴 Iwara 链接直接跳转）
 npm run test:hardening # 31 项安全加固（路径穿越 / 媒体防盗链 / 频控 / CSRF）
 npm run shots          # 重新生成 README 截图（输出到 docs/screenshots/）
 ```

@@ -1498,11 +1498,62 @@ select.input {
   opacity: 1;
 }
 
+/* 时间分隔符默认不显示，只在窄屏出现（见下） */
+.player__time-sep {
+  display: none;
+  color: #cfc8dc;
+  opacity: 0.55;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
 /* 移动端：进度条要更粗更好抓，滑动条也加长。 */
 @media (max-width: 680px) {
   .player__controls {
-    gap: 8px;
-    padding: 22px 12px 10px;
+    /* 加了「0:31 / 2:07」之后横向更紧张，间距收到 6px 把宽度让给进度条 */
+    gap: 6px;
+    padding: 22px 10px 10px;
+  }
+
+  .player__time {
+    font-size: 11px;
+  }
+
+  .player__time-sep {
+    font-size: 11px;
+  }
+
+  /* 窄屏上两个时间会被压到进度条两边、看起来像「0:31 2:07」，
+     所以把它们并到一起显示成「0:31 / 2:07」，进度条留在后面。 */
+  .player__controls > button[data-act='toggle'] {
+    order: 1;
+  }
+  .player__time--now {
+    order: 2;
+  }
+  .player__time-sep {
+    order: 3;
+    display: inline;
+  }
+  .player__time--total {
+    order: 4;
+  }
+  .player__scrub {
+    order: 5;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .player__volume {
+    order: 6;
+  }
+  .quality {
+    order: 7;
+  }
+  .player__controls > button[data-act='pip'] {
+    order: 8;
+  }
+  .player__controls > button[data-act='fullscreen'] {
+    order: 9;
   }
   .player__scrub {
     height: 34px;
@@ -2097,6 +2148,14 @@ main.is-loading {
 .comment__text .inline-img {
   max-width: min(100%, 420px);
   max-height: 380px;
+}
+
+/* ---------------------------------------------------------------- 主题按钮 */
+
+/* 跟随系统时给个淡底色，和"锁定某一套配色"区分开 */
+#theme-button.is-auto {
+  background: var(--ink-2);
+  color: var(--paper-2);
 }
 
 /* ---------------------------------------------------------------- 搜索排序 */

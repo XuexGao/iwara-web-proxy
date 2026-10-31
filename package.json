@@ -23,7 +23,8 @@
     "test:linkify": "node test/linkify.test.mjs",
     "test:relations": "node test/relations.test.mjs",
     "test:search": "node test/search.test.mjs",
-    "test:hardening": "node test/hardening.test.mjs"
+    "test:hardening": "node test/hardening.test.mjs",
+    "test:links": "node test/links.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.126.0"

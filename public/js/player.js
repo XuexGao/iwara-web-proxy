@@ -74,8 +74,10 @@ export function createPlayer(options) {
 
   const toggleButton = tpl`<button type="button" data-act="toggle" aria-label="播放/暂停">${icon('play')}</button>`;
   const muteButton = tpl`<button type="button" data-act="mute" aria-label="静音">${icon('volume')}</button>`;
-  const elapsed = tpl`<span class="player__time">0:00</span>`;
-  const durationLabel = tpl`<span class="player__time">0:00</span>`;
+  const elapsed = tpl`<span class="player__time player__time--now">0:00</span>`;
+  // 分隔符只在窄屏显示：桌面端两个时间分居进度条两侧，加斜杠反而多余。
+  const timeSep = tpl`<span class="player__time-sep" aria-hidden="true">/</span>`;
+  const durationLabel = tpl`<span class="player__time player__time--total">0:00</span>`;
   const played = tpl`<div class="player__played"></div>`;
   const buffered = tpl`<div class="player__buf"></div>`;
   const knob = tpl`<div class="player__knob"></div>`;
@@ -105,6 +107,7 @@ export function createPlayer(options) {
     <div class="player__controls">
       ${toggleButton}
       ${elapsed}
+      ${timeSep}
       ${durationLabel}
       ${scrub}
       <div class="player__volume">${muteButton}${volumeInput}</div>

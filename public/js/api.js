@@ -36,6 +36,14 @@ function messageFrom(status, payload) {
  * @param {string} path 例如 '/videos'
  * @param {{params?: object, method?: string, body?: any, site?: string, fresh?: boolean}} options
  */
+/** 当前 hash 路由里的 _site 参数（没有就返回空串）。 */
+function siteFromLocation() {
+  const hash = typeof location === 'undefined' ? '' : location.hash || '';
+  const index = hash.indexOf('?');
+  if (index < 0) return '';
+  return new URLSearchParams(hash.slice(index + 1)).get('_site') || '';
+}
+
 export async function iwara(path, options = {}) {
   const { params, method = 'GET', body, site, fresh } = options;
   const search = new URLSearchParams();
@@ -43,7 +51,11 @@ export async function iwara(path, options = {}) {
     if (value === undefined || value === null || value === '') continue;
     search.set(key, String(value));
   }
-  if (site) search.set('_site', site);
+  // 站点选择：调用方没显式指定时，看当前路由的 _site 参数。
+  // 这样从 iwara.ai 链接跳进来的页面（/video/xxx?_site=ai）后续请求都对得上，
+  // 不需要每个视图都传一遍。
+  const resolvedSite = site || siteFromLocation();
+  if (resolvedSite) search.set('_site', resolvedSite);
   const query = search.toString();
 
   const headers = {};

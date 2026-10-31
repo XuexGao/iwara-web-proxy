@@ -5,6 +5,7 @@
 import { avatarUrl } from './api.js';
 import { stopAllPreviews } from './cards-preview.js';
 import { playback } from './player.js';
+import { routeFromInput } from './links.js';
 import router from './router.js';
 import {
   bootstrapTheme,
@@ -81,6 +82,17 @@ searchForm?.addEventListener('submit', (event) => {
   event.preventDefault();
   const query = searchInput.value.trim();
   if (!query) return;
+
+  // 粘的是 Iwara 链接就直接跳到对应页面，而不是拿整串去搜索——
+  // 那种关键词永远搜不到东西。
+  const route = routeFromInput(query);
+  if (route) {
+    searchInput.value = '';
+    router.navigate(route);
+    toast('已打开链接对应的页面');
+    return;
+  }
+
   router.navigate(`/search?q=${encodeURIComponent(query)}`);
 });
 
@@ -127,19 +139,40 @@ const themeButton = document.getElementById('theme-button');
 
 function paintThemeButton() {
   if (!themeButton) return;
+  const mode = getTheme();
   const resolved = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
-  // 图标画的是"当前处于哪种配色"（浅色=太阳，深色=月亮），
-  // title 说明点下去会变成什么，两者不混用。
-  themeButton.innerHTML = `<svg class="icon"><use href="#i-${resolved === 'light' ? 'sun' : 'moon'}"/></svg>`;
-  themeButton.title = resolved === 'light' ? '当前浅色，点击切换到深色' : '当前深色，点击切换到浅色';
-  themeButton.setAttribute('aria-label', themeButton.title);
+
+  // 跟随系统时用一个「自动」图标（太阳月亮同时出现），明确区分于手动锁定。
+  const iconName = mode === 'system' ? 'contrast' : resolved === 'light' ? 'sun' : 'moon';
+  themeButton.innerHTML = `<svg class="icon"><use href="#i-${iconName}"/></svg>`;
+
+  const label =
+    mode === 'system'
+      ? `跟随系统（当前${resolved === 'light' ? '浅色' : '深色'}），点击锁定为深色`
+      : mode === 'dark'
+        ? '已锁定深色，点击切到浅色'
+        : '已锁定浅色，点击改为跟随系统';
+  themeButton.title = label;
+  themeButton.setAttribute('aria-label', label);
+  // 只在跟随系统时给一点视觉提示
+  themeButton.classList.toggle('is-auto', mode === 'system');
 }
 
+// 三态循环：跟随系统 → 深色 → 浅色 → 跟随系统。
+// 两态循环的问题是：用户点过一次就再也回不到"跟随系统"了。
+const THEME_CYCLE = ['system', 'dark', 'light'];
+
 themeButton?.addEventListener('click', () => {
-  const current = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
-  setTheme(current === 'light' ? 'dark' : 'light');
+  const current = getTheme();
+  const next = THEME_CYCLE[(THEME_CYCLE.indexOf(current) + 1) % THEME_CYCLE.length];
+  setTheme(next);
   paintThemeButton();
-  toast(current === 'light' ? '已切换到深色' : '已切换到浅色');
+  if (next === 'system') {
+    const resolved = document.documentElement.dataset.theme === 'light' ? '浅色' : '深色';
+    toast(`已改为跟随系统（当前${resolved}）`);
+  } else {
+    toast(next === 'dark' ? '已锁定深色' : '已锁定浅色');
+  }
 });
 
 // 设置页改动配色时同步按钮图标，避免两处各写一套 DOM 操作。

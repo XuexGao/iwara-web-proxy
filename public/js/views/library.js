@@ -424,7 +424,7 @@ export async function renderSettings(ctx) {
   defaultsPanel.append(
     selectRow({
       label: '配色',
-      hint: '选「跟随系统」时，系统切到浅色或深色会自动跟着变。顶部工具栏的按钮显示当前配色，点一下就切到另一种。',
+      hint: '选「跟随系统」时，系统切到浅色或深色会自动跟着变。顶部工具栏的按钮按「跟随系统 → 深色 → 浅色」三档循环，图标是半明半暗就表示正在跟随系统。',
       value: themeValue,
       options: [
         { value: 'system', label: '跟随系统' },
